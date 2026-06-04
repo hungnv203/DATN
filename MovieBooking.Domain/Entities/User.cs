@@ -8,6 +8,8 @@ public class User : BaseEntity
     public string Email { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
+    public string? PasswordResetToken { get; set; }
+    public DateTimeOffset? PasswordResetExpires { get; set; }
     public string Status { get; set; } = string.Empty;
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
     public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
@@ -15,4 +17,19 @@ public class User : BaseEntity
     public LoyaltyPoint? LoyaltyPoint { get; set; }
     public ICollection<PointTransaction> PointTransactions { get; set; } = new List<PointTransaction>();
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+
+    public void SetPassword(string passwordHash, DateTimeOffset when)
+    {
+        PasswordHash = passwordHash;
+        PasswordResetToken = null;
+        PasswordResetExpires = null;
+        MarkUpdated(when);
+    }
+
+    public void SetPasswordReset(string token, DateTimeOffset expiresAt, DateTimeOffset when)
+    {
+        PasswordResetToken = token;
+        PasswordResetExpires = expiresAt;
+        MarkUpdated(when);
+    }
 }

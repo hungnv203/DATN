@@ -51,6 +51,10 @@ public class AppDbContext : DbContext
             .HasIndex(x => x.UserId)
             .IsUnique();
 
+        modelBuilder.Entity<User>()
+            .HasIndex(x => x.Email)
+            .IsUnique();
+
         modelBuilder.Entity<Payment>()
             .HasOne(x => x.Booking)
             .WithOne(x => x.Payment)

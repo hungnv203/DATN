@@ -1,0 +1,29 @@
+# Development Rules for MovieBooking Project
+
+1. **Strict Clean Architecture Adherence**:
+   - **Domain Layer**: Must NOT reference any other project layer or external infrastructure libraries (like EF Core). Keep it pure.
+   - **Application Layer**: References ONLY the Domain layer. Define interfaces here (e.g., `ICrudService`).
+   - **Infrastructure Layer**: References Application and Domain. Implement database access, external API calls, and caching here.
+   - **API Layer**: References Application and Infrastructure strictly for Dependency Injection setup.
+
+2. **Data Access & Services**:
+   - Controllers should NEVER inject or use `AppDbContext` directly.
+   - Rely on generic services like `ICrudService<TEntity, TDto>` or specific application services for data operations.
+   - Keep business logic inside the Application layer, not in API Controllers.
+
+3. **Database Configuration**:
+   - Always configure entity relationships, indexes, and constraints in `AppDbContext.OnModelCreating` using the Fluent API (do not rely solely on data annotations).
+   - Ensure `DeleteBehavior.Restrict` is used where appropriate to avoid unintended cascading deletes (e.g., for `Booking` to `User`).
+
+4. **API and DTOs**:
+   - NEVER expose Domain Entities directly in API requests or responses.
+   - Always use Data Transfer Objects (DTOs) and map them using AutoMapper.
+   - Controllers should be lightweight. They should parse the request, pass it to the Application service, and return the appropriate HTTP status code.
+
+5. **Asynchronous Programming**:
+   - Always use `async` and `await` for I/O operations, especially database calls via EF Core (e.g., `ToListAsync()`, `FirstOrDefaultAsync()`).
+
+6. **C# Conventions**:
+   - Use file-scoped namespaces (`namespace MovieBooking.Application;`).
+   - Enable and respect nullable reference types (`<Nullable>enable</Nullable>`). Avoid null reference exceptions by checking or initializing properties.
+   - Keep files small and focused on a single class or interface.

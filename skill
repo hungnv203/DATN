@@ -1,0 +1,29 @@
+# Required Skills for MovieBooking Project
+
+To effectively develop and maintain this project, the following skills are required:
+
+1. **C# & .NET 10**:
+   - Proficiency in modern C# features (records, pattern matching, top-level statements, file-scoped namespaces).
+   - Deep understanding of the .NET 10 ecosystem and cross-platform development.
+
+2. **ASP.NET Core Web API**:
+   - Building and designing RESTful APIs.
+   - Configuring the HTTP request pipeline, middleware, and Dependency Injection.
+   - Documenting APIs using Swagger/OpenAPI.
+
+3. **Entity Framework Core (EF Core)**:
+   - Code-First development and managing migrations.
+   - Configuring complex database relationships (one-to-one, one-to-many, many-to-many) and constraints using the Fluent API (`OnModelCreating`).
+   - Writing efficient LINQ queries and understanding eager/lazy/explicit loading.
+
+4. **PostgreSQL**:
+   - Understanding relational database concepts, indexing, and optimization.
+   - Using the Npgsql provider for EF Core.
+
+5. **Clean Architecture & Domain-Driven Design (DDD) Concepts**:
+   - Maintaining strict separation of concerns across Presentation, Infrastructure, Application, and Domain layers.
+   - Understanding Domain Entities, Value Objects, and Application Services.
+
+6. **Design Patterns & Libraries**:
+   - Utilizing generic Repository/Service patterns (e.g., `ICrudService<,>`).
+   - Object-to-Object mapping using AutoMapper.

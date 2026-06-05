@@ -56,7 +56,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Bookings");
+                    b.ToTable("Bookings", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.BookingPromotion", b =>
@@ -87,7 +87,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
                     b.HasIndex("BookingId", "PromotionId")
                         .IsUnique();
 
-                    b.ToTable("BookingPromotions");
+                    b.ToTable("BookingPromotions", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Cinema", b =>
@@ -116,7 +116,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Cinemas");
+                    b.ToTable("Cinemas", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Genre", b =>
@@ -137,7 +137,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Genres");
+                    b.ToTable("Genres", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.LoyaltyPoint", b =>
@@ -163,7 +163,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("LoyaltyPoints");
+                    b.ToTable("LoyaltyPoints", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Movie", b =>
@@ -210,7 +210,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Movies");
+                    b.ToTable("Movies", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.MovieGenre", b =>
@@ -238,7 +238,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
                     b.HasIndex("MovieId", "GenreId")
                         .IsUnique();
 
-                    b.ToTable("MovieGenres");
+                    b.ToTable("MovieGenres", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Notification", b =>
@@ -276,7 +276,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Notifications");
+                    b.ToTable("Notifications", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Payment", b =>
@@ -314,7 +314,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
                     b.HasIndex("BookingId")
                         .IsUnique();
 
-                    b.ToTable("Payments");
+                    b.ToTable("Payments", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.PaymentLog", b =>
@@ -344,7 +344,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PaymentId");
 
-                    b.ToTable("PaymentLogs");
+                    b.ToTable("PaymentLogs", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.PointTransaction", b =>
@@ -373,7 +373,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("PointTransactions");
+                    b.ToTable("PointTransactions", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Promotion", b =>
@@ -414,7 +414,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Promotions");
+                    b.ToTable("Promotions", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Role", b =>
@@ -439,7 +439,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Roles");
+                    b.ToTable("Roles", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Room", b =>
@@ -472,7 +472,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CinemaId");
 
-                    b.ToTable("Rooms");
+                    b.ToTable("Rooms", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Seat", b =>
@@ -505,7 +505,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RoomId");
 
-                    b.ToTable("Seats");
+                    b.ToTable("Seats", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.SeatHold", b =>
@@ -540,7 +540,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("SeatHolds");
+                    b.ToTable("SeatHolds", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Showtime", b =>
@@ -580,7 +580,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RoomId");
 
-                    b.ToTable("Showtimes");
+                    b.ToTable("Showtimes", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Ticket", b =>
@@ -618,7 +618,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SeatId");
 
-                    b.ToTable("Tickets");
+                    b.ToTable("Tickets", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.User", b =>
@@ -664,7 +664,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.UserRole", b =>
@@ -692,7 +692,7 @@ namespace MovieBooking.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "RoleId")
                         .IsUnique();
 
-                    b.ToTable("UserRoles");
+                    b.ToTable("UserRoles", (string)null);
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Booking", b =>

@@ -8,7 +8,7 @@ public abstract class BaseEntity
 
     public DateTimeOffset? UpdatedAt { get; protected set; }
 
-    protected void MarkUpdated(DateTimeOffset updatedAt)
+    public void MarkUpdated(DateTimeOffset updatedAt)
     {
         UpdatedAt = updatedAt;
     }

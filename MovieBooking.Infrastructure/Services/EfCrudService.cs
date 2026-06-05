@@ -21,19 +21,19 @@ public class EfCrudService<TEntity, TDto> : ICrudService<TEntity, TDto>
         _mapper = mapper;
     }
 
-    public async Task<IReadOnlyList<TDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    public virtual async Task<IReadOnlyList<TDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         var entities = await _dbSet.AsNoTracking().ToListAsync(cancellationToken);
         return entities.Select(e => _mapper.Map<TDto>(e)).ToList();
     }
 
-    public async Task<TDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public virtual async Task<TDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var entity = await _dbSet.FindAsync([id], cancellationToken);
         return entity is null ? null : _mapper.Map<TDto>(entity);
     }
 
-    public async Task<TDto> CreateAsync(TDto dto, CancellationToken cancellationToken = default)
+    public virtual async Task<TDto> CreateAsync(TDto dto, CancellationToken cancellationToken = default)
     {
         var entity = new TEntity();
         _mapper.Map(dto, entity);
@@ -42,7 +42,7 @@ public class EfCrudService<TEntity, TDto> : ICrudService<TEntity, TDto>
         return _mapper.Map<TDto>(entity);
     }
 
-    public async Task<bool> UpdateAsync(Guid id, TDto dto, CancellationToken cancellationToken = default)
+    public virtual async Task<bool> UpdateAsync(Guid id, TDto dto, CancellationToken cancellationToken = default)
     {
         var entity = await _dbSet.FindAsync([id], cancellationToken);
         if (entity is null)
@@ -55,7 +55,7 @@ public class EfCrudService<TEntity, TDto> : ICrudService<TEntity, TDto>
         return true;
     }
 
-    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    public virtual async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var entity = await _dbSet.FindAsync([id], cancellationToken);
         if (entity is null)

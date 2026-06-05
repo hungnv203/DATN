@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using MovieBooking.Application.Common.Configuration;
+using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
+using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Mapping;
 using MovieBooking.Infrastructure.Persistence;
 using MovieBooking.Infrastructure.Security;
@@ -21,11 +23,13 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
 
         services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(connectionString));
+            options.UseNpgsql(connectionString)
+                   .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
         services.AddAutoMapper(cfg => cfg.AddProfile<EntityDtoProfile>());
 
         services.AddScoped(typeof(ICrudService<,>), typeof(EfCrudService<,>));
+        services.AddScoped<ICrudService<User, UserDto>, UserCrudService>();
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IUserService, UserService>();

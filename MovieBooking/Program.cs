@@ -8,6 +8,8 @@ using MovieBooking.Application.Common.Configuration;
 using MovieBooking.Infrastructure;
 using MovieBooking.Infrastructure.Persistence;
 
+System.AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -87,6 +89,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseStaticFiles();
 
 app.UseHttpsRedirection();
 

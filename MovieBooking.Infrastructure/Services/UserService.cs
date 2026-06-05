@@ -54,6 +54,20 @@ public class UserService : IUserService
         _db.Users.Add(user);
         await _db.SaveChangesAsync(cancellationToken);
 
+        // Assign default Customer role
+        var customerRoleName = "Customer";
+        var role = await _db.Roles.FirstOrDefaultAsync(r => r.Name == customerRoleName, cancellationToken);
+        if (role == null)
+        {
+            role = new Role { Name = customerRoleName, Description = "Customer role" };
+            await _db.Roles.AddAsync(role, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        var userRole = new UserRole { UserId = user.Id, RoleId = role.Id };
+        await _db.UserRoles.AddAsync(userRole, cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+
         return BuildAuthResponse(user);
     }
 
@@ -131,7 +145,12 @@ public class UserService : IUserService
 
     private AuthResponseDto BuildAuthResponse(User user)
     {
-        var (token, expiresAt) = _jwtTokenGenerator.CreateAccessToken(user.Id, user.Email, user.FullName);
+        var roles = _db.UserRoles
+            .Where(ur => ur.UserId == user.Id)
+            .Select(ur => ur.Role.Name)
+            .ToList();
+
+        var (token, expiresAt) = _jwtTokenGenerator.CreateAccessToken(user.Id, user.Email, user.FullName, roles);
         return new AuthResponseDto
         {
             AccessToken = token,

@@ -32,12 +32,16 @@ public static class DependencyInjection
 
         services.AddScoped(typeof(ICrudService<,>), typeof(EfCrudService<,>));
         services.AddScoped<ICrudService<User, UserDto>, UserCrudService>();
-        services.AddScoped<ICrudService<Booking, BookingDto>, BookingCrudService>();
+        services.AddScoped<IBookingService, BookingCrudService>();
+        services.AddScoped<ICrudService<Booking, BookingDto>>(provider => provider.GetRequiredService<IBookingService>());
         services.AddScoped<ICrudService<Ticket, TicketDto>, TicketCrudService>();
+        services.AddScoped<IShowtimeService, ShowtimeCrudService>();
+        services.AddScoped<ICrudService<Showtime, ShowtimeDto>>(provider => provider.GetRequiredService<IShowtimeService>());
         services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IUserService, UserService>();
+        services.AddHostedService<ExpiredSeatHoldsCleanupService>();
 
         return services;
     }

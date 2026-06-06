@@ -34,7 +34,7 @@ public abstract class CrudController<TEntity, TDto> : ControllerBase
 
     [HttpPost]
     [Authorize(Roles = "Admin,Manager")]
-    public async Task<ActionResult<TDto>> Create([FromBody] TDto dto, CancellationToken cancellationToken)
+    public virtual async Task<ActionResult<TDto>> Create([FromBody] TDto dto, CancellationToken cancellationToken)
     {
         var created = await _crudService.CreateAsync(dto, cancellationToken);
         var id = (Guid?)typeof(TDto).GetProperty("Id")?.GetValue(created) ?? Guid.Empty;
@@ -43,7 +43,7 @@ public abstract class CrudController<TEntity, TDto> : ControllerBase
 
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Admin,Manager")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] TDto dto, CancellationToken cancellationToken)
+    public virtual async Task<IActionResult> Update(Guid id, [FromBody] TDto dto, CancellationToken cancellationToken)
     {
         var updated = await _crudService.UpdateAsync(id, dto, cancellationToken);
         return updated ? NoContent() : NotFound();
@@ -51,7 +51,7 @@ public abstract class CrudController<TEntity, TDto> : ControllerBase
 
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Admin,Manager")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    public virtual async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var deleted = await _crudService.DeleteAsync(id, cancellationToken);
         return deleted ? NoContent() : NotFound();

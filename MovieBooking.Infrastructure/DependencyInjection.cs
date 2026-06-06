@@ -22,6 +22,8 @@ public static class DependencyInjection
 
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
 
+        services.AddHttpContextAccessor();
+
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(connectionString)
                    .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
@@ -30,6 +32,9 @@ public static class DependencyInjection
 
         services.AddScoped(typeof(ICrudService<,>), typeof(EfCrudService<,>));
         services.AddScoped<ICrudService<User, UserDto>, UserCrudService>();
+        services.AddScoped<ICrudService<Booking, BookingDto>, BookingCrudService>();
+        services.AddScoped<ICrudService<Ticket, TicketDto>, TicketCrudService>();
+        services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IUserService, UserService>();

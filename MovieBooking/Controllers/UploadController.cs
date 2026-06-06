@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MovieBooking.Application.Common.Interfaces;
 
 namespace MovieBooking.Controllers;
 
@@ -8,8 +9,14 @@ namespace MovieBooking.Controllers;
 [Authorize(Roles = "Admin,Manager")]
 public class UploadController : ControllerBase
 {
+    private readonly IImageUploadService _imageUploadService;
     private readonly string[] _allowedExtensions = [".jpg", ".jpeg", ".png", ".webp"];
     private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
+
+    public UploadController(IImageUploadService imageUploadService)
+    {
+        _imageUploadService = imageUploadService;
+    }
 
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -33,22 +40,17 @@ public class UploadController : ControllerBase
             return BadRequest(new { message = "Invalid file type. Only JPG, JPEG, PNG, and WEBP are allowed." });
         }
 
-        // Target folder inside wwwroot
-        var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
-        if (!Directory.Exists(uploadsFolder))
+        try
         {
-            Directory.CreateDirectory(uploadsFolder);
+            using var stream = file.OpenReadStream();
+            var fileName = $"{Guid.NewGuid()}{extension}";
+            var imageUrl = await _imageUploadService.UploadImageAsync(stream, fileName, cancellationToken);
+
+            return Ok(new { url = imageUrl });
         }
-
-        var fileName = $"{Guid.NewGuid()}{extension}";
-        var filePath = Path.Combine(uploadsFolder, fileName);
-
-        using (var stream = new FileStream(filePath, FileMode.Create))
+        catch (Exception ex)
         {
-            await file.CopyToAsync(stream, cancellationToken);
+            return BadRequest(new { message = ex.Message });
         }
-
-        var fileUrl = $"{Request.Scheme}://{Request.Host}/uploads/{fileName}";
-        return Ok(new { url = fileUrl });
     }
 }

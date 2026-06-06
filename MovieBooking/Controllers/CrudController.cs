@@ -19,14 +19,14 @@ public abstract class CrudController<TEntity, TDto> : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<TDto>>> GetAll(CancellationToken cancellationToken)
+    public virtual async Task<ActionResult<IReadOnlyList<TDto>>> GetAll(CancellationToken cancellationToken)
     {
         var result = await _crudService.GetAllAsync(cancellationToken);
         return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<TDto>> GetById(Guid id, CancellationToken cancellationToken)
+    public virtual async Task<ActionResult<TDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
         var result = await _crudService.GetByIdAsync(id, cancellationToken);
         return result is null ? NotFound() : Ok(result);

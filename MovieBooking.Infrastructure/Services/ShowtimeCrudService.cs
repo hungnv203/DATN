@@ -23,6 +23,24 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
         _mapper = mapper;
     }
 
+    public override async Task<IReadOnlyList<ShowtimeDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        var entities = await _dbContext.Showtimes
+            .AsNoTracking()
+            .Include(s => s.Room)
+            .ToListAsync(cancellationToken);
+        return _mapper.Map<IReadOnlyList<ShowtimeDto>>(entities);
+    }
+
+    public override async Task<ShowtimeDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.Showtimes
+            .AsNoTracking()
+            .Include(s => s.Room)
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+        return entity is null ? null : _mapper.Map<ShowtimeDto>(entity);
+    }
+
     public override async Task<ShowtimeDto> CreateAsync(ShowtimeDto dto, CancellationToken cancellationToken = default)
     {
         await CheckClashAsync(dto, null, cancellationToken);

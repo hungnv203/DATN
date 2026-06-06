@@ -9,4 +9,5 @@ public class ShowtimeDto
     public DateTime EndTime { get; set; }
     public decimal BasePrice { get; set; }
     public string Status { get; set; } = string.Empty;
+    public RoomDto? Room { get; set; }
 }

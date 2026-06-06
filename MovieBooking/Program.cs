@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using MovieBooking.Application;
 using MovieBooking.Application.Common.Configuration;
+using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Infrastructure;
 using MovieBooking.Infrastructure.Persistence;
 
@@ -75,12 +76,15 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+using (var scope = app.Services.CreateScope())
 {
-    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+
+    var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+    await DbSeeder.SeedAsync(db, passwordHasher);
 }
+
 
 // Configure the HTTP request pipeline.
 app.MapOpenApi();

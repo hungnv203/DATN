@@ -10,6 +10,7 @@ using MovieBooking.Infrastructure.Mapping;
 using MovieBooking.Infrastructure.Persistence;
 using MovieBooking.Infrastructure.Security;
 using MovieBooking.Infrastructure.Services;
+using MovieBooking.Infrastructure.Services.Payment;
 
 namespace MovieBooking.Infrastructure;
 
@@ -41,6 +42,7 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IVnPayService, VnPayService>();
         services.AddHostedService<ExpiredSeatHoldsCleanupService>();
 
         return services;

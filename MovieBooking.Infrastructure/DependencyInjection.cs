@@ -45,6 +45,9 @@ public static class DependencyInjection
         services.AddScoped<IVnPayService, VnPayService>();
         services.AddHostedService<ExpiredSeatHoldsCleanupService>();
 
+        services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+        services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, PermissionAuthorizationHandler>();
+
         return services;
     }
 }

@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<Cinema> Cinemas => Set<Cinema>();
     public DbSet<Room> Rooms => Set<Room>();
     public DbSet<Seat> Seats => Set<Seat>();
@@ -37,6 +39,10 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<UserRole>()
             .HasIndex(x => new { x.UserId, x.RoleId })
+            .IsUnique();
+
+        modelBuilder.Entity<RolePermission>()
+            .HasIndex(x => new { x.RoleId, x.PermissionId })
             .IsUnique();
 
         modelBuilder.Entity<MovieGenre>()

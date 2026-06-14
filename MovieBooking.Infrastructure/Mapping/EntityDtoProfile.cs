@@ -17,6 +17,12 @@ public class EntityDtoProfile : Profile
         CreateMap<UserRole, UserRoleDto>();
         CreateMap<UserRoleDto, UserRole>().IgnoreBaseEntityFromDto();
 
+        CreateMap<Permission, PermissionDto>();
+        CreateMap<PermissionDto, Permission>().IgnoreBaseEntityFromDto();
+
+        CreateMap<RolePermission, RolePermissionDto>();
+        CreateMap<RolePermissionDto, RolePermission>().IgnoreBaseEntityFromDto();
+
         CreateMap<Cinema, CinemaDto>();
         CreateMap<CinemaDto, Cinema>().IgnoreBaseEntityFromDto();
 

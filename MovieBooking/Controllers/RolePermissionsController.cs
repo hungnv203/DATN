@@ -1,0 +1,14 @@
+using Microsoft.AspNetCore.Mvc;
+using MovieBooking.Application.Common.DTOs;
+using MovieBooking.Application.Common.Interfaces;
+using MovieBooking.Domain.Entities;
+
+namespace MovieBooking.Controllers;
+
+[Route("api/[controller]")]
+public class RolePermissionsController : CrudController<RolePermission, RolePermissionDto>
+{
+    public RolePermissionsController(ICrudService<RolePermission, RolePermissionDto> crudService) : base(crudService)
+    {
+    }
+}

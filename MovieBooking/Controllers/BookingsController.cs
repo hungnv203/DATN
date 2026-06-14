@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
@@ -19,6 +20,7 @@ public class BookingsController : CrudController<Booking, BookingDto>
     }
 
     [HttpPost]
+    [AllowAnonymous]
     public override async Task<ActionResult<BookingDto>> Create([FromBody] BookingDto dto, CancellationToken cancellationToken)
     {
         try

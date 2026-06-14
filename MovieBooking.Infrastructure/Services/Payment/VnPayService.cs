@@ -32,12 +32,12 @@ public class VnPayService : IVnPayService
         vnpay.AddRequestData("vnp_IpAddr", string.IsNullOrEmpty(ipAddress) ? "127.0.0.1" : ipAddress);
         vnpay.AddRequestData("vnp_Locale", "vn");
 
-        vnpay.AddRequestData("vnp_OrderInfo", "Thanh toan don hang:" + booking.Id);
+        vnpay.AddRequestData("vnp_OrderInfo", "ThanhToanDonHang" + booking.Id.ToString("N"));
         vnpay.AddRequestData("vnp_OrderType", "other"); //default value: other
         vnpay.AddRequestData("vnp_ReturnUrl", _configuration["VnPay:PaymentBackReturnUrl"]);
         
-        // Use Payment.Id as TxnRef to map when callback returns
-        vnpay.AddRequestData("vnp_TxnRef", payment.Id.ToString());
+        // Use Payment.Id as TxnRef to map when callback returns, removing hyphens to be safe
+        vnpay.AddRequestData("vnp_TxnRef", payment.Id.ToString("N"));
 
         var paymentUrl = vnpay.CreateRequestUrl(_configuration["VnPay:BaseUrl"], _configuration["VnPay:HashSecret"]);
 

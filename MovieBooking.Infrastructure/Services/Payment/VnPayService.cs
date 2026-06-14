@@ -26,7 +26,8 @@ public class VnPayService : IVnPayService
         // Amount must be multiplied by 100
         vnpay.AddRequestData("vnp_Amount", (payment.Amount * 100).ToString("0")); 
         
-        vnpay.AddRequestData("vnp_CreateDate", payment.CreatedAt.ToString("yyyyMMddHHmmss"));
+        // VNPAY requires GMT+7 time
+        vnpay.AddRequestData("vnp_CreateDate", payment.CreatedAt.ToOffset(TimeSpan.FromHours(7)).ToString("yyyyMMddHHmmss"));
         vnpay.AddRequestData("vnp_CurrCode", "VND");
         vnpay.AddRequestData("vnp_IpAddr", string.IsNullOrEmpty(ipAddress) ? "127.0.0.1" : ipAddress);
         vnpay.AddRequestData("vnp_Locale", "vn");

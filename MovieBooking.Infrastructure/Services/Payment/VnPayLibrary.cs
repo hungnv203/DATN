@@ -40,7 +40,7 @@ public class VnPayLibrary
         {
             if (!string.IsNullOrEmpty(kv.Value))
             {
-                data.Append(WebUtility.UrlEncode(kv.Key) + "=" + WebUtility.UrlEncode(kv.Value) + "&");
+                data.Append(Uri.EscapeDataString(kv.Key) + "=" + Uri.EscapeDataString(kv.Value) + "&");
             }
         }
         var querystring = data.ToString();
@@ -79,7 +79,7 @@ public class VnPayLibrary
         {
             if (!string.IsNullOrEmpty(kv.Value))
             {
-                data.Append(WebUtility.UrlEncode(kv.Key) + "=" + WebUtility.UrlEncode(kv.Value) + "&");
+                data.Append(Uri.EscapeDataString(kv.Key) + "=" + Uri.EscapeDataString(kv.Value) + "&");
             }
         }
         if (data.Length > 0)

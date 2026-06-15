@@ -67,5 +67,41 @@ public static class DbSeeder
             db.UserRoles.Add(userRole);
             await db.SaveChangesAsync();
         }
+
+        // 4. Seed All Standard Permissions
+        var controllers = new[]
+        {
+            "BookingPromotions", "Bookings", "Cinemas", "Genres", "LoyaltyPoints",
+            "MovieGenres", "Movies", "Notifications", "PaymentLogs", "Payments",
+            "Permissions", "PointTransactions", "Promotions", "RolePermissions",
+            "Roles", "Rooms", "SeatHolds", "Seats", "Showtimes", "Tickets",
+            "UserRoles", "Users"
+        };
+        var actions = new[] { "Create", "Update", "Delete" };
+
+        var dbPermissions = await db.Permissions.ToListAsync();
+        var permissionsToAdd = new List<Permission>();
+
+        foreach (var controller in controllers)
+        {
+            foreach (var action in actions)
+            {
+                var permissionName = $"Permissions.{controller}.{action}";
+                if (!dbPermissions.Any(p => p.Name == permissionName))
+                {
+                    permissionsToAdd.Add(new Permission
+                    {
+                        Name = permissionName,
+                        Description = $"Auto-generated permission for {action} on {controller}"
+                    });
+                }
+            }
+        }
+
+        if (permissionsToAdd.Any())
+        {
+            db.Permissions.AddRange(permissionsToAdd);
+            await db.SaveChangesAsync();
+        }
     }
 }

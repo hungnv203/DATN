@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MovieBooking.Application.Common.DTOs;
@@ -47,6 +48,7 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
     }
 
     [HttpGet("vnpay-callback")]
+    [AllowAnonymous]
     public async Task<IActionResult> PaymentCallback()
     {
         var dict = Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString());

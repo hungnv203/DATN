@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Domain.Common;
+using MovieBooking.Infrastructure.Security;
 
 namespace MovieBooking.Controllers;
 
@@ -33,7 +34,7 @@ public abstract class CrudController<TEntity, TDto> : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin,Manager")]
+    [HasPermission("Create")]
     public virtual async Task<ActionResult<TDto>> Create([FromBody] TDto dto, CancellationToken cancellationToken)
     {
         var created = await _crudService.CreateAsync(dto, cancellationToken);
@@ -42,7 +43,7 @@ public abstract class CrudController<TEntity, TDto> : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Admin,Manager")]
+    [HasPermission("Update")]
     public virtual async Task<IActionResult> Update(Guid id, [FromBody] TDto dto, CancellationToken cancellationToken)
     {
         var updated = await _crudService.UpdateAsync(id, dto, cancellationToken);
@@ -50,7 +51,7 @@ public abstract class CrudController<TEntity, TDto> : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "Admin,Manager")]
+    [HasPermission("Delete")]
     public virtual async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var deleted = await _crudService.DeleteAsync(id, cancellationToken);

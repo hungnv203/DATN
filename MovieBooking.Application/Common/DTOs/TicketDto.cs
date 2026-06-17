@@ -8,4 +8,7 @@ public class TicketDto
     public decimal Price { get; set; }
     public string QrCode { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public string MovieTitle { get; set; } = string.Empty;
+    public string SeatLabel { get; set; } = string.Empty;
+    public string PaymentStatus { get; set; } = string.Empty;
 }

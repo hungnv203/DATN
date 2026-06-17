@@ -40,7 +40,11 @@ public class TicketCrudService : EfCrudService<Ticket, TicketDto>
 
         var isAdminOrManager = user.IsInRole("Admin") || user.IsInRole("Manager") || user.IsInRole("Cashier");
 
-        IQueryable<Ticket> query = _db.Tickets;
+        IQueryable<Ticket> query = _db.Tickets
+            .Include(t => t.Seat)
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.Showtime)
+                    .ThenInclude(s => s.Movie);
         if (!isAdminOrManager)
         {
             query = query.Where(t => t.Booking.UserId == userId);
@@ -53,7 +57,10 @@ public class TicketCrudService : EfCrudService<Ticket, TicketDto>
     public override async Task<TicketDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var ticket = await _db.Tickets
+            .Include(t => t.Seat)
             .Include(t => t.Booking)
+                .ThenInclude(b => b.Showtime)
+                    .ThenInclude(s => s.Movie)
             .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
         if (ticket == null) return null;
 

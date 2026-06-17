@@ -55,7 +55,7 @@ public class VnPayService : IVnPayService
             }
         }
 
-        var vnp_orderId = Convert.ToInt64(vnpay.GetResponseData("vnp_TxnRef"));
+        var vnp_orderId = vnpay.GetResponseData("vnp_TxnRef");
         var vnp_TransactionId = Convert.ToInt64(vnpay.GetResponseData("vnp_TransactionNo"));
         var vnp_SecureHash = collections.FirstOrDefault(p => p.Key == "vnp_SecureHash").Value;
         var vnp_ResponseCode = vnpay.GetResponseData("vnp_ResponseCode");
@@ -75,7 +75,7 @@ public class VnPayService : IVnPayService
             Success = true,
             PaymentMethod = "VnPay",
             OrderDescription = vnp_OrderInfo,
-            OrderId = vnp_orderId.ToString(),
+            OrderId = vnp_orderId,
             TransactionId = vnp_TransactionId.ToString(),
             Token = vnp_SecureHash,
             VnPayResponseCode = vnp_ResponseCode

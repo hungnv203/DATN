@@ -9,4 +9,5 @@ public class BookingDto
     public decimal TotalPrice { get; set; }
     public DateTime? ExpiredAt { get; set; }
     public List<Guid> SeatIds { get; set; } = new();
+    public List<BookingConcessionDto> Concessions { get; set; } = new();
 }

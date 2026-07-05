@@ -1,12 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MovieBooking.Application.Common.Interfaces;
+using MovieBooking.Infrastructure.Security;
 
 namespace MovieBooking.Controllers;
 
 [ApiController]
 [Route("api/upload")]
-[Authorize(Roles = "Admin,Manager")]
+[HasPermission("Upload")]
 public class UploadController : ControllerBase
 {
     private readonly IImageUploadService _imageUploadService;

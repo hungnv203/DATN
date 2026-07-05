@@ -73,5 +73,11 @@ public class EntityDtoProfile : Profile
 
         CreateMap<Notification, NotificationDto>();
         CreateMap<NotificationDto, Notification>().IgnoreBaseEntityFromDto();
+
+        CreateMap<Concession, ConcessionDto>();
+        CreateMap<ConcessionDto, Concession>().IgnoreBaseEntityFromDto();
+
+        CreateMap<BookingConcession, BookingConcessionDto>();
+        CreateMap<BookingConcessionDto, BookingConcession>().IgnoreBaseEntityFromDto();
     }
 }

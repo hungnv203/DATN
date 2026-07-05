@@ -32,6 +32,8 @@ public class AppDbContext : DbContext
     public DbSet<LoyaltyPoint> LoyaltyPoints => Set<LoyaltyPoint>();
     public DbSet<PointTransaction> PointTransactions => Set<PointTransaction>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<Concession> Concessions => Set<Concession>();
+    public DbSet<BookingConcession> BookingConcessions => Set<BookingConcession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -82,5 +84,17 @@ public class AppDbContext : DbContext
             .HasOne(x => x.User)
             .WithOne(x => x.LoyaltyPoint)
             .HasForeignKey<LoyaltyPoint>(x => x.UserId);
+
+        modelBuilder.Entity<BookingConcession>()
+            .HasOne(x => x.Booking)
+            .WithMany(x => x.BookingConcessions)
+            .HasForeignKey(x => x.BookingId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BookingConcession>()
+            .HasOne(x => x.Concession)
+            .WithMany(x => x.BookingConcessions)
+            .HasForeignKey(x => x.ConcessionId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

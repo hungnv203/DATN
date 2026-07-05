@@ -170,6 +170,27 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
             });
         }
 
+        var bookingConcessions = new List<BookingConcession>();
+        if (dto.Concessions != null && dto.Concessions.Count > 0)
+        {
+            var concessionIds = dto.Concessions.Select(c => c.ConcessionId).ToList();
+            var concessions = await _db.Concessions.Where(c => concessionIds.Contains(c.Id)).ToListAsync(cancellationToken);
+            foreach (var reqConc in dto.Concessions)
+            {
+                var concession = concessions.FirstOrDefault(c => c.Id == reqConc.ConcessionId);
+                if (concession != null)
+                {
+                    total += concession.Price * reqConc.Quantity;
+                    bookingConcessions.Add(new BookingConcession
+                    {
+                        ConcessionId = concession.Id,
+                        Quantity = reqConc.Quantity,
+                        Price = concession.Price
+                    });
+                }
+            }
+        }
+
         // Create booking
         var booking = new Booking
         {
@@ -178,7 +199,8 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
             Status = dto.Status ?? "Pending",
             TotalPrice = total,
             ExpiredAt = (dto.Status == "Paid") ? null : DateTime.UtcNow.AddMinutes(10), // If paid (POS), no expiration. If pending (Online), expires in 10 mins
-            Tickets = tickets
+            Tickets = tickets,
+            BookingConcessions = bookingConcessions
         };
 
         await _db.Bookings.AddAsync(booking, cancellationToken);
@@ -283,5 +305,58 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
             Message = "Giữ ghế thành công.",
             ExpiredAt = expiry
         };
+    }
+
+    public async Task<List<MyTicketDto>> GetMyTicketsAsync(CancellationToken cancellationToken = default)
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext == null) return new List<MyTicketDto>();
+
+        var user = httpContext.User;
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier) ?? user.FindFirst("sub");
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+            return new List<MyTicketDto>();
+
+        var tickets = await _db.Tickets
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.Showtime)
+                    .ThenInclude(s => s.Movie)
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.Showtime)
+                    .ThenInclude(s => s.Room)
+                        .ThenInclude(r => r.Cinema)
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.BookingConcessions)
+                    .ThenInclude(bc => bc.Concession)
+            .Include(t => t.Seat)
+            .Where(t => t.Booking.UserId == userId)
+            .OrderByDescending(t => t.Booking.Showtime.StartTime)
+            .ToListAsync(cancellationToken);
+
+        var result = new List<MyTicketDto>();
+        foreach (var t in tickets)
+        {
+            result.Add(new MyTicketDto
+            {
+                Id = t.Id,
+                BookingId = t.BookingId,
+                MovieTitle = t.Booking.Showtime.Movie.Title,
+                CinemaName = t.Booking.Showtime.Room.Cinema.Name,
+                RoomName = t.Booking.Showtime.Room.Name,
+                StartTime = t.Booking.Showtime.StartTime,
+                SeatLabel = $"{t.Seat.RowLabel}{t.Seat.SeatNumber}",
+                QrCode = t.QrCode,
+                Status = t.Status,
+                PaymentStatus = t.Booking.Status,
+                Price = t.Price,
+                Concessions = t.Booking.BookingConcessions.Select(bc => new TicketConcessionDto
+                {
+                    Name = bc.Concession.Name,
+                    Quantity = bc.Quantity
+                }).ToList()
+            });
+        }
+
+        return result;
     }
 }

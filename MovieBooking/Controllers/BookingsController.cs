@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -49,5 +50,12 @@ public class BookingsController : CrudController<Booking, BookingDto>
         {
             return BadRequest(new SeatHoldResultDto { Success = false, Message = ex.Message });
         }
+    }
+
+    [HttpGet("my-tickets")]
+    public async Task<ActionResult<List<MyTicketDto>>> GetMyTickets(CancellationToken cancellationToken)
+    {
+        var tickets = await _bookingService.GetMyTicketsAsync(cancellationToken);
+        return Ok(tickets);
     }
 }

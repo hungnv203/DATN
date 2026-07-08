@@ -198,7 +198,7 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
             ShowtimeId = dto.ShowtimeId,
             Status = dto.Status ?? "Pending",
             TotalPrice = total,
-            ExpiredAt = (dto.Status == "Paid") ? null : DateTime.UtcNow.AddMinutes(10), // If paid (POS), no expiration. If pending (Online), expires in 10 mins
+            ExpiredAt = (dto.Status == "Paid") ? null : DateTime.UtcNow.AddMinutes(5), // If paid (POS), no expiration. If pending (Online), expires in 5 mins
             Tickets = tickets,
             BookingConcessions = bookingConcessions
         };
@@ -287,7 +287,7 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
         }
 
         // Create new holds
-        var expiry = DateTime.UtcNow.AddMinutes(10);
+        var expiry = DateTime.UtcNow.AddMinutes(5);
         var newHolds = request.SeatIds.Select(seatId => new SeatHold
         {
             ShowtimeId = request.ShowtimeId,

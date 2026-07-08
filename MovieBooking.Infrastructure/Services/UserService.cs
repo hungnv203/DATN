@@ -151,11 +151,14 @@ public class UserService : IUserService
             .ToList();
 
         var (token, expiresAt) = _jwtTokenGenerator.CreateAccessToken(user.Id, user.Email, user.FullName, roles);
+        var userDto = _mapper.Map<UserDto>(user);
+        userDto.RoleName = roles.FirstOrDefault();
+
         return new AuthResponseDto
         {
             AccessToken = token,
             ExpiresAtUtc = expiresAt,
-            User = _mapper.Map<UserDto>(user)
+            User = userDto
         };
     }
 }

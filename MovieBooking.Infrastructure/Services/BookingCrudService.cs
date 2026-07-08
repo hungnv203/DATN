@@ -45,7 +45,10 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
 
         var isAdminOrManager = user.IsInRole("Admin") || user.IsInRole("Manager") || user.IsInRole("Cashier");
 
-        IQueryable<Booking> query = _db.Bookings;
+        IQueryable<Booking> query = _db.Bookings
+            .Include(b => b.Tickets)
+            .Include(b => b.BookingConcessions)
+                .ThenInclude(bc => bc.Concession);
         if (!isAdminOrManager)
         {
             query = query.Where(b => b.UserId == userId);
@@ -57,7 +60,11 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
 
     public override async Task<BookingDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var booking = await _db.Bookings.FindAsync([id], cancellationToken);
+        var booking = await _db.Bookings
+            .Include(b => b.Tickets)
+            .Include(b => b.BookingConcessions)
+                .ThenInclude(bc => bc.Concession)
+            .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
         if (booking == null) return null;
 
         var httpContext = _httpContextAccessor.HttpContext;
@@ -184,6 +191,7 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
                     bookingConcessions.Add(new BookingConcession
                     {
                         ConcessionId = concession.Id,
+                        Concession = concession,
                         Quantity = reqConc.Quantity,
                         Price = concession.Price
                     });

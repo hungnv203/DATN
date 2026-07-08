@@ -44,7 +44,9 @@ public class EntityDtoProfile : Profile
         CreateMap<Showtime, ShowtimeDto>();
         CreateMap<ShowtimeDto, Showtime>().IgnoreBaseEntityFromDto();
 
-        CreateMap<Booking, BookingDto>();
+        CreateMap<Booking, BookingDto>()
+            .ForMember(dest => dest.SeatIds, opt => opt.MapFrom(src => src.Tickets.Select(t => t.SeatId).ToList()))
+            .ForMember(dest => dest.Concessions, opt => opt.MapFrom(src => src.BookingConcessions));
         CreateMap<BookingDto, Booking>().IgnoreBaseEntityFromDto();
 
         CreateMap<Ticket, TicketDto>()
@@ -80,7 +82,9 @@ public class EntityDtoProfile : Profile
         CreateMap<Concession, ConcessionDto>();
         CreateMap<ConcessionDto, Concession>().IgnoreBaseEntityFromDto();
 
-        CreateMap<BookingConcession, BookingConcessionDto>();
+        CreateMap<BookingConcession, BookingConcessionDto>()
+            .ForMember(dest => dest.ConcessionName, opt => opt.MapFrom(src => src.Concession.Name))
+            .ForMember(dest => dest.ConcessionImageUrl, opt => opt.MapFrom(src => src.Concession.ImageUrl));
         CreateMap<BookingConcessionDto, BookingConcession>().IgnoreBaseEntityFromDto();
     }
 }

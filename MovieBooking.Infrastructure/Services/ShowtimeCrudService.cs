@@ -44,7 +44,8 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
     public override async Task<ShowtimeDto> CreateAsync(ShowtimeDto dto, CancellationToken cancellationToken = default)
     {
         await CheckClashAsync(dto, null, cancellationToken);
-        return await base.CreateAsync(dto, cancellationToken);
+        var created = await base.CreateAsync(dto, cancellationToken);
+        return await GetByIdAsync(created.Id, cancellationToken) ?? created;
     }
 
     public override async Task<bool> UpdateAsync(Guid id, ShowtimeDto dto, CancellationToken cancellationToken = default)

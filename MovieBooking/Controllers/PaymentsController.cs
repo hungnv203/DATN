@@ -30,6 +30,15 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
         if (booking == null) return NotFound("Booking not found");
         if (booking.Status != "Pending") return BadRequest("Booking is not in pending status.");
 
+        var existingPayment = await _db.Payments
+            .FirstOrDefaultAsync(p => p.BookingId == booking.Id && p.Status == "Pending");
+        if (existingPayment != null)
+        {
+            var existingIpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            var existingUrl = _vnPayService.CreatePaymentUrl(existingIpAddress, existingPayment, booking);
+            return Ok(new { Url = existingUrl });
+        }
+
         var payment = new Payment
         {
             BookingId = booking.Id,

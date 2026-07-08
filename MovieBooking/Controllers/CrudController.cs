@@ -37,17 +37,31 @@ public abstract class CrudController<TEntity, TDto> : ControllerBase
     [HasPermission("Create")]
     public virtual async Task<ActionResult<TDto>> Create([FromBody] TDto dto, CancellationToken cancellationToken)
     {
-        var created = await _crudService.CreateAsync(dto, cancellationToken);
-        var id = (Guid?)typeof(TDto).GetProperty("Id")?.GetValue(created) ?? Guid.Empty;
-        return CreatedAtAction(nameof(GetById), new { id }, created);
+        try
+        {
+            var created = await _crudService.CreateAsync(dto, cancellationToken);
+            var id = (Guid?)typeof(TDto).GetProperty("Id")?.GetValue(created) ?? Guid.Empty;
+            return CreatedAtAction(nameof(GetById), new { id }, created);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPut("{id:guid}")]
     [HasPermission("Update")]
     public virtual async Task<IActionResult> Update(Guid id, [FromBody] TDto dto, CancellationToken cancellationToken)
     {
-        var updated = await _crudService.UpdateAsync(id, dto, cancellationToken);
-        return updated ? NoContent() : NotFound();
+        try
+        {
+            var updated = await _crudService.UpdateAsync(id, dto, cancellationToken);
+            return updated ? NoContent() : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpDelete("{id:guid}")]

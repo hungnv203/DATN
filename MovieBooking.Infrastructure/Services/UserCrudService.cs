@@ -52,10 +52,17 @@ public class UserCrudService : EfCrudService<User, UserDto>
 
     public override async Task<UserDto> CreateAsync(UserDto dto, CancellationToken cancellationToken = default)
     {
+        var normalizedEmail = dto.Email.Trim().ToLowerInvariant();
+        var emailExists = await _db.Users.AnyAsync(u => u.Email == normalizedEmail, cancellationToken);
+        if (emailExists)
+        {
+            throw new InvalidOperationException("Email is already registered.");
+        }
+
         var user = new User
         {
             FullName = dto.FullName,
-            Email = dto.Email.Trim().ToLowerInvariant(),
+            Email = normalizedEmail,
             PhoneNumber = dto.PhoneNumber,
             Status = string.IsNullOrWhiteSpace(dto.Status) ? "Active" : dto.Status,
             PasswordHash = _passwordHasher.Hash(string.IsNullOrWhiteSpace(dto.Password) ? "123456" : dto.Password)
@@ -88,8 +95,17 @@ public class UserCrudService : EfCrudService<User, UserDto>
         var user = await _db.Users.FindAsync([id], cancellationToken);
         if (user == null) return false;
 
+        var normalizedEmail = dto.Email.Trim().ToLowerInvariant();
+        var emailExists = await _db.Users.AnyAsync(
+            u => u.Id != id && u.Email == normalizedEmail,
+            cancellationToken);
+        if (emailExists)
+        {
+            throw new InvalidOperationException("Email is already registered.");
+        }
+
         user.FullName = dto.FullName;
-        user.Email = dto.Email.Trim().ToLowerInvariant();
+        user.Email = normalizedEmail;
         user.PhoneNumber = dto.PhoneNumber;
         user.Status = dto.Status;
 

@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<IVnPayService, VnPayService>();
         services.AddHostedService<ExpiredSeatHoldsCleanupService>();
         services.AddHostedService<ExpiredBookingsCleanupService>();
+        services.AddHostedService<MovieStatusUpdateService>();
 
         services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, PermissionAuthorizationHandler>();

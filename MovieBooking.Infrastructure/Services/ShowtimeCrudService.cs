@@ -60,6 +60,19 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
             throw new InvalidOperationException("Thời gian bắt đầu phải trước thời gian kết thúc.");
         }
 
+        var movie = await _dbContext.Movies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == dto.MovieId, cancellationToken);
+        if (movie == null)
+        {
+            throw new InvalidOperationException("Movie not found.");
+        }
+
+        if (dto.StartTime.Date < movie.ReleaseDate.Date)
+        {
+            throw new InvalidOperationException("Showtime cannot be before the movie release date.");
+        }
+
         var clashExists = await _dbContext.Showtimes
             .AnyAsync(s => s.RoomId == dto.RoomId 
                            && s.Id != excludeId

@@ -13,14 +13,17 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
 {
     private readonly IVnPayService _vnPayService;
     private readonly AppDbContext _db;
+    private readonly ILoyaltyService _loyaltyService;
 
     public PaymentsController(
         ICrudService<Payment, PaymentDto> crudService, 
         IVnPayService vnPayService, 
-        AppDbContext db) : base(crudService) 
+        AppDbContext db,
+        ILoyaltyService loyaltyService) : base(crudService) 
     { 
         _vnPayService = vnPayService;
         _db = db;
+        _loyaltyService = loyaltyService;
     }
 
     [HttpPost("create-url")]
@@ -83,28 +86,7 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
                 ticket.Status = "Reserved"; // Ensure ticket is reserved
             }
 
-            // Loyalty Points Logic
-            var user = await _db.Users.Include(u => u.LoyaltyPoint).FirstOrDefaultAsync(u => u.Id == payment.Booking.UserId);
-            if (user != null)
-            {
-                int earnedPoints = (int)(payment.Amount * 0.01m); // 1% points
-                if (user.LoyaltyPoint == null)
-                {
-                    user.LoyaltyPoint = new LoyaltyPoint { UserId = user.Id, Points = earnedPoints };
-                    _db.LoyaltyPoints.Add(user.LoyaltyPoint);
-                }
-                else
-                {
-                    user.LoyaltyPoint.Points += earnedPoints;
-                }
-                
-                _db.PointTransactions.Add(new PointTransaction
-                {
-                    UserId = user.Id,
-                    Points = earnedPoints,
-                    Type = "Earn"
-                });
-            }
+            await _loyaltyService.EarnForBookingAsync(payment.BookingId, payment.Amount);
         }
         else
         {
@@ -145,21 +127,7 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
                 ticket.Status = "Cancelled";
             }
 
-            // Revert Loyalty Points Logic
-            var user = await _db.Users.Include(u => u.LoyaltyPoint).FirstOrDefaultAsync(u => u.Id == payment.Booking.UserId);
-            if (user != null && user.LoyaltyPoint != null)
-            {
-                int refundedPoints = (int)(payment.Amount * 0.01m); // 1% points
-                user.LoyaltyPoint.Points -= refundedPoints;
-                if (user.LoyaltyPoint.Points < 0) user.LoyaltyPoint.Points = 0;
-
-                _db.PointTransactions.Add(new PointTransaction
-                {
-                    UserId = user.Id,
-                    Points = -refundedPoints,
-                    Type = "Refund"
-                });
-            }
+            await _loyaltyService.RefundForBookingAsync(payment.BookingId, payment.Amount);
 
             _db.PaymentLogs.Add(new PaymentLog
             {

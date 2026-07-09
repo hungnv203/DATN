@@ -14,4 +14,5 @@ public class Movie : BaseEntity
     public string Status { get; set; } = string.Empty;
     public ICollection<MovieGenre> MovieGenres { get; set; } = new List<MovieGenre>();
     public ICollection<Showtime> Showtimes { get; set; } = new List<Showtime>();
+    public ICollection<MovieReview> Reviews { get; set; } = new List<MovieReview>();
 }

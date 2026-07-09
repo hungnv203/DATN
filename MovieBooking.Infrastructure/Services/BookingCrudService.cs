@@ -19,13 +19,22 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
     private readonly AppDbContext _db;
     private readonly IMapper _mapper;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IPricingService _pricingService;
+    private readonly ILoyaltyService _loyaltyService;
 
-    public BookingCrudService(AppDbContext db, IMapper mapper, IHttpContextAccessor httpContextAccessor)
+    public BookingCrudService(
+        AppDbContext db,
+        IMapper mapper,
+        IHttpContextAccessor httpContextAccessor,
+        IPricingService pricingService,
+        ILoyaltyService loyaltyService)
         : base(db, mapper)
     {
         _db = db;
         _mapper = mapper;
         _httpContextAccessor = httpContextAccessor;
+        _pricingService = pricingService;
+        _loyaltyService = loyaltyService;
     }
 
     public override async Task<IReadOnlyList<BookingDto>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -152,8 +161,18 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
             }
         }
 
-        // Calculate pricing
-        decimal total = 0;
+        var quote = await _pricingService.QuoteAsync(
+            new BookingQuoteRequestDto
+            {
+                ShowtimeId = dto.ShowtimeId,
+                SeatIds = dto.SeatIds,
+                Concessions = dto.Concessions,
+                PromotionCode = dto.PromotionCode,
+                UsedPoints = dto.UsedPoints
+            },
+            finalUserId,
+            cancellationToken);
+
         var tickets = new List<Ticket>();
         foreach (var seat in seats)
         {
@@ -166,8 +185,6 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
             {
                 price += 40000; // Couple markup
             }
-            total += price;
-
             tickets.Add(new Ticket
             {
                 SeatId = seat.Id,
@@ -187,7 +204,6 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
                 var concession = concessions.FirstOrDefault(c => c.Id == reqConc.ConcessionId);
                 if (concession != null)
                 {
-                    total += concession.Price * reqConc.Quantity;
                     bookingConcessions.Add(new BookingConcession
                     {
                         ConcessionId = concession.Id,
@@ -199,16 +215,39 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
             }
         }
 
+        var bookingPromotions = new List<BookingPromotion>();
+        if (!string.IsNullOrWhiteSpace(dto.PromotionCode) && quote.DiscountAmount > 0)
+        {
+            var normalizedCode = dto.PromotionCode.Trim().ToUpperInvariant();
+            var promotion = await _db.Promotions.FirstOrDefaultAsync(
+                p => p.Code.ToUpper() == normalizedCode,
+                cancellationToken);
+            if (promotion != null)
+            {
+                bookingPromotions.Add(new BookingPromotion
+                {
+                    PromotionId = promotion.Id,
+                    Promotion = promotion,
+                    DiscountAmount = quote.DiscountAmount
+                });
+            }
+        }
+
         // Create booking
         var booking = new Booking
         {
             UserId = finalUserId,
             ShowtimeId = dto.ShowtimeId,
             Status = dto.Status ?? "Pending",
-            TotalPrice = total,
+            Subtotal = quote.Subtotal,
+            DiscountAmount = quote.DiscountAmount,
+            PointDiscountAmount = quote.PointDiscountAmount,
+            UsedPoints = quote.UsedPoints,
+            TotalPrice = quote.TotalPrice,
             ExpiredAt = (dto.Status == "Paid") ? null : DateTime.UtcNow.AddMinutes(5), // If paid (POS), no expiration. If pending (Online), expires in 5 mins
             Tickets = tickets,
-            BookingConcessions = bookingConcessions
+            BookingConcessions = bookingConcessions,
+            BookingPromotions = bookingPromotions
         };
 
         await _db.Bookings.AddAsync(booking, cancellationToken);
@@ -223,9 +262,15 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        if (quote.UsedPoints > 0)
+        {
+            await _loyaltyService.RedeemForBookingAsync(booking.Id, quote.UsedPoints, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
 
         var resultDto = _mapper.Map<BookingDto>(booking);
         resultDto.SeatIds = dto.SeatIds; // Preserve seat IDs in result
+        resultDto.PromotionCode = dto.PromotionCode;
         return resultDto;
     }
 

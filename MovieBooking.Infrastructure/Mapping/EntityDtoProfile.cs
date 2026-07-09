@@ -35,6 +35,10 @@ public class EntityDtoProfile : Profile
         CreateMap<Movie, MovieDto>();
         CreateMap<MovieDto, Movie>().IgnoreBaseEntityFromDto();
 
+        CreateMap<MovieReview, MovieReviewDto>()
+            .ForMember(dest => dest.UserName, opt => opt.MapFrom(src => src.User.FullName));
+        CreateMap<MovieReviewDto, MovieReview>().IgnoreBaseEntityFromDto();
+
         CreateMap<Genre, GenreDto>();
         CreateMap<GenreDto, Genre>().IgnoreBaseEntityFromDto();
 

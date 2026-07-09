@@ -6,6 +6,11 @@ public class BookingDto
     public Guid UserId { get; set; }
     public Guid ShowtimeId { get; set; }
     public string Status { get; set; } = string.Empty;
+    public decimal Subtotal { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public decimal PointDiscountAmount { get; set; }
+    public int UsedPoints { get; set; }
+    public string? PromotionCode { get; set; }
     public decimal TotalPrice { get; set; }
     public DateTime? ExpiredAt { get; set; }
     public List<Guid> SeatIds { get; set; } = new();

@@ -14,10 +14,12 @@ namespace MovieBooking.Controllers;
 public class BookingsController : CrudController<Booking, BookingDto>
 {
     private readonly IBookingService _bookingService;
+    private readonly IPricingService _pricingService;
 
-    public BookingsController(IBookingService bookingService) : base(bookingService)
+    public BookingsController(IBookingService bookingService, IPricingService pricingService) : base(bookingService)
     {
         _bookingService = bookingService;
+        _pricingService = pricingService;
     }
 
     [HttpPost]
@@ -52,10 +54,31 @@ public class BookingsController : CrudController<Booking, BookingDto>
         }
     }
 
+    [HttpPost("quote")]
+    public async Task<ActionResult<BookingQuoteDto>> Quote([FromBody] BookingQuoteRequestDto request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            var quote = await _pricingService.QuoteAsync(request, userId == Guid.Empty ? null : userId, cancellationToken);
+            return Ok(quote);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("my-tickets")]
     public async Task<ActionResult<List<MyTicketDto>>> GetMyTickets(CancellationToken cancellationToken)
     {
         var tickets = await _bookingService.GetMyTicketsAsync(cancellationToken);
         return Ok(tickets);
+    }
+
+    private Guid GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+        return userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId) ? userId : Guid.Empty;
     }
 }

@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<Room> Rooms => Set<Room>();
     public DbSet<Seat> Seats => Set<Seat>();
     public DbSet<Movie> Movies => Set<Movie>();
+    public DbSet<MovieReview> MovieReviews => Set<MovieReview>();
     public DbSet<Genre> Genres => Set<Genre>();
     public DbSet<MovieGenre> MovieGenres => Set<MovieGenre>();
     public DbSet<Showtime> Showtimes => Set<Showtime>();
@@ -49,6 +50,10 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<MovieGenre>()
             .HasIndex(x => new { x.MovieId, x.GenreId })
+            .IsUnique();
+
+        modelBuilder.Entity<MovieReview>()
+            .HasIndex(x => new { x.MovieId, x.UserId })
             .IsUnique();
 
         modelBuilder.Entity<BookingPromotion>()
@@ -85,6 +90,12 @@ public class AppDbContext : DbContext
             .WithOne(x => x.LoyaltyPoint)
             .HasForeignKey<LoyaltyPoint>(x => x.UserId);
 
+        modelBuilder.Entity<PointTransaction>()
+            .HasOne(x => x.Booking)
+            .WithMany(x => x.PointTransactions)
+            .HasForeignKey(x => x.BookingId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         modelBuilder.Entity<BookingConcession>()
             .HasOne(x => x.Booking)
             .WithMany(x => x.BookingConcessions)
@@ -96,5 +107,23 @@ public class AppDbContext : DbContext
             .WithMany(x => x.BookingConcessions)
             .HasForeignKey(x => x.ConcessionId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<MovieReview>()
+            .HasOne(x => x.Movie)
+            .WithMany(x => x.Reviews)
+            .HasForeignKey(x => x.MovieId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<MovieReview>()
+            .HasOne(x => x.User)
+            .WithMany(x => x.MovieReviews)
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<MovieReview>()
+            .HasOne(x => x.Booking)
+            .WithMany(x => x.MovieReviews)
+            .HasForeignKey(x => x.BookingId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

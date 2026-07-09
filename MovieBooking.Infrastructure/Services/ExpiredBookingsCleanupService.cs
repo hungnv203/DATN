@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Infrastructure.Persistence;
 
 namespace MovieBooking.Infrastructure.Services;
@@ -32,6 +33,7 @@ public class ExpiredBookingsCleanupService : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var loyaltyService = scope.ServiceProvider.GetRequiredService<ILoyaltyService>();
 
                 var now = DateTime.UtcNow;
                 var expiredBookings = await dbContext.Bookings
@@ -61,6 +63,8 @@ public class ExpiredBookingsCleanupService : BackgroundService
                         {
                             booking.Payment.Status = "Expired";
                         }
+
+                        await loyaltyService.ReturnRedeemedPointsAsync(booking.Id, stoppingToken);
                     }
 
                     await dbContext.SaveChangesAsync(stoppingToken);

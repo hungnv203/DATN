@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.AddScoped<IPricingService, PricingService>();
         services.AddScoped<ILoyaltyService, LoyaltyService>();
         services.AddScoped<IMovieReviewService, MovieReviewService>();
+        services.AddScoped<IMovieDiscoveryService, MovieDiscoveryService>();
         services.AddScoped<ICrudService<Ticket, TicketDto>, TicketCrudService>();
         services.AddScoped<IShowtimeService, ShowtimeCrudService>();
         services.AddScoped<ICrudService<Showtime, ShowtimeDto>>(provider => provider.GetRequiredService<IShowtimeService>());

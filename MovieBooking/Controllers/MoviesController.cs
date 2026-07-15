@@ -9,7 +9,23 @@ namespace MovieBooking.Controllers;
 [Route("api/movies")]
 public class MoviesController : CrudController<Movie, MovieDto>
 {
-    public MoviesController(ICrudService<Movie, MovieDto> crudService) : base(crudService) { }
+    private readonly IMovieDiscoveryService _movieDiscoveryService;
+
+    public MoviesController(
+        ICrudService<Movie, MovieDto> crudService,
+        IMovieDiscoveryService movieDiscoveryService) : base(crudService)
+    {
+        _movieDiscoveryService = movieDiscoveryService;
+    }
+
+    [AllowAnonymous]
+    [HttpGet("discovery")]
+    public async Task<ActionResult<MovieDiscoveryDto>> GetDiscovery(
+        [FromQuery] int limit = 10,
+        CancellationToken cancellationToken = default)
+    {
+        return Ok(await _movieDiscoveryService.GetDiscoveryAsync(limit, cancellationToken));
+    }
 
     [AllowAnonymous]
     [HttpGet]

@@ -4,6 +4,7 @@ using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Persistence;
+using MovieBooking.Infrastructure.Security;
 
 namespace MovieBooking.Controllers;
 
@@ -18,7 +19,10 @@ public class TicketsController : CrudController<Ticket, TicketDto>
     }
 
     [HttpPost("checkin")]
-    public async Task<IActionResult> CheckIn([FromBody] CheckInRequest request)
+    [HasPermission("CheckIn")]
+    public async Task<IActionResult> CheckIn(
+        [FromBody] CheckInRequest request,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(request.QrCode))
             return BadRequest("QR Code is required");
@@ -26,7 +30,7 @@ public class TicketsController : CrudController<Ticket, TicketDto>
         var ticket = await _db.Tickets
             .Include(t => t.Booking)
             .ThenInclude(b => b.Showtime)
-            .FirstOrDefaultAsync(t => t.QrCode == request.QrCode);
+            .FirstOrDefaultAsync(t => t.QrCode == request.QrCode, cancellationToken);
 
         if (ticket == null)
             return NotFound(new { Success = false, Message = "Vé không tồn tại hoặc QR không hợp lệ" });
@@ -45,7 +49,7 @@ public class TicketsController : CrudController<Ticket, TicketDto>
         //     return BadRequest(new { Success = false, Message = "Chưa đến giờ check-in (chỉ hỗ trợ check-in trước 30 phút)." });
 
         ticket.Status = "CheckedIn";
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(cancellationToken);
 
         return Ok(new { Success = true, Message = "Check-in thành công!", TicketId = ticket.Id });
     }

@@ -5,6 +5,9 @@ using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Persistence;
+using MovieBooking.Infrastructure.Security;
+using System.Security.Claims;
+using System.Data;
 
 namespace MovieBooking.Controllers;
 
@@ -26,15 +29,37 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
         _loyaltyService = loyaltyService;
     }
 
-    [HttpPost("create-url")]
-    public async Task<IActionResult> CreatePaymentUrl([FromBody] CreatePaymentRequest request)
+    [Authorize(Roles = "Admin")]
+    public override Task<ActionResult<IReadOnlyList<PaymentDto>>> GetAll(
+        CancellationToken cancellationToken)
     {
-        var booking = await _db.Bookings.FirstOrDefaultAsync(b => b.Id == request.BookingId);
+        return base.GetAll(cancellationToken);
+    }
+
+    [Authorize(Roles = "Admin")]
+    public override Task<ActionResult<PaymentDto>> GetById(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return base.GetById(id, cancellationToken);
+    }
+
+    [HttpPost("create-url")]
+    public async Task<IActionResult> CreatePaymentUrl(
+        [FromBody] CreatePaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var booking = await _db.Bookings.FirstOrDefaultAsync(
+            b => b.Id == request.BookingId,
+            cancellationToken);
         if (booking == null) return NotFound("Booking not found");
+        if (!CanAccessBooking(booking)) return Forbid();
         if (booking.Status != "Pending") return BadRequest("Booking is not in pending status.");
 
         var existingPayment = await _db.Payments
-            .FirstOrDefaultAsync(p => p.BookingId == booking.Id && p.Status == "Pending");
+            .FirstOrDefaultAsync(
+                p => p.BookingId == booking.Id && p.Status == "Pending",
+                cancellationToken);
         if (existingPayment != null)
         {
             var existingIpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
@@ -52,7 +77,7 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
         };
 
         _db.Payments.Add(payment);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(cancellationToken);
 
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
         var url = _vnPayService.CreatePaymentUrl(ipAddress, payment, booking);
@@ -61,7 +86,7 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
 
     [HttpGet("vnpay-callback")]
     [AllowAnonymous]
-    public async Task<IActionResult> PaymentCallback()
+    public async Task<IActionResult> PaymentCallback(CancellationToken cancellationToken)
     {
         var dict = Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString());
         var response = _vnPayService.PaymentExecute(dict);
@@ -71,10 +96,30 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
             return BadRequest("Invalid PaymentId");
         }
 
-        var payment = await _db.Payments.Include(p => p.Booking).ThenInclude(b => b.Tickets).FirstOrDefaultAsync(p => p.Id == paymentId);
+        await using var transaction = await _db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+
+        var payment = await _db.Payments
+            .Include(p => p.Booking)
+            .ThenInclude(b => b.Tickets)
+            .FirstOrDefaultAsync(p => p.Id == paymentId, cancellationToken);
         if (payment == null) return NotFound("Payment not found");
 
-        if (response.Success && response.VnPayResponseCode == "00")
+        var callbackSucceeded = response.Success
+            && response.VnPayResponseCode == "00"
+            && response.Amount == payment.Amount;
+        if (payment.Status == "Success")
+        {
+            return Redirect(BuildReturnUrl(true, payment.BookingId));
+        }
+
+        if (payment.Status != "Pending")
+        {
+            return Conflict("Payment is no longer pending.");
+        }
+
+        if (callbackSucceeded)
         {
             payment.Status = "Success";
             payment.TransactionCode = response.TransactionId;
@@ -86,7 +131,10 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
                 ticket.Status = "Reserved"; // Ensure ticket is reserved
             }
 
-            await _loyaltyService.EarnForBookingAsync(payment.BookingId, payment.Amount);
+            await _loyaltyService.EarnForBookingAsync(
+                payment.BookingId,
+                payment.Amount,
+                cancellationToken);
         }
         else
         {
@@ -97,50 +145,48 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
         _db.PaymentLogs.Add(new PaymentLog
         {
             PaymentId = payment.Id,
-            Status = response.Success ? "Success" : "Failed",
+            Status = callbackSucceeded ? "Success" : "Failed",
             ResponseData = $"VNPAY Response: {response.VnPayResponseCode}, Transaction: {response.TransactionId}"
         });
 
-        await _db.SaveChangesAsync();
-
-        var config = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
-        var baseUrl = config["VnPay:AppReturnUrl"] ?? "http://localhost:3000/payment-result";
-        var returnUrl = $"{baseUrl}?success={response.Success}&bookingId={payment.BookingId}";
-        return Redirect(returnUrl);
+        await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return Redirect(BuildReturnUrl(callbackSucceeded, payment.BookingId));
     }
     [HttpPost("{id}/refund")]
-    public async Task<IActionResult> RefundPayment(Guid id)
+    [HasPermission("Refund")]
+    public async Task<IActionResult> RefundPayment(Guid id, CancellationToken cancellationToken)
     {
-        var payment = await _db.Payments.Include(p => p.Booking).ThenInclude(b => b.Tickets).FirstOrDefaultAsync(p => p.Id == id);
+        var payment = await _db.Payments
+            .Include(p => p.Booking)
+            .ThenInclude(b => b.Tickets)
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
         if (payment == null) return NotFound("Payment not found");
         if (payment.Status != "Success") return BadRequest("Cannot refund a non-successful payment.");
 
-        // Simulate calling VNPAY Refund API here
-        bool refundSuccess = true; // Simulating success for Sandbox
-        
-        if (refundSuccess)
+        return StatusCode(
+            StatusCodes.Status501NotImplemented,
+            new { message = "VNPAY refund integration is not configured." });
+    }
+
+    private bool CanAccessBooking(Booking booking)
+    {
+        if (User.IsInRole("Admin") || User.IsInRole("Manager") || User.IsInRole("Cashier"))
         {
-            payment.Status = "Refunded";
-            payment.Booking.Status = "Refunded";
-            foreach (var ticket in payment.Booking.Tickets)
-            {
-                ticket.Status = "Cancelled";
-            }
-
-            await _loyaltyService.RefundForBookingAsync(payment.BookingId, payment.Amount);
-
-            _db.PaymentLogs.Add(new PaymentLog
-            {
-                PaymentId = payment.Id,
-                Status = "Success",
-                ResponseData = $"VNPAY Refund processed successfully"
-            });
-
-            await _db.SaveChangesAsync();
-            return Ok(new { Message = "Refund successful" });
+            return true;
         }
 
-        return BadRequest("Refund failed at Payment Gateway.");
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+        return userIdClaim != null
+            && Guid.TryParse(userIdClaim.Value, out var userId)
+            && booking.UserId == userId;
+    }
+
+    private string BuildReturnUrl(bool success, Guid bookingId)
+    {
+        var config = HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+        var baseUrl = config["VnPay:AppReturnUrl"] ?? "http://localhost:3000/payment-result";
+        return $"{baseUrl}?success={success.ToString().ToLowerInvariant()}&bookingId={bookingId}";
     }
 }
 

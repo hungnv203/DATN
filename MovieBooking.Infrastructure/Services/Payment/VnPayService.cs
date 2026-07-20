@@ -16,13 +16,15 @@ public class VnPayService : IVnPayService
 
     public string CreatePaymentUrl(string ipAddress, Domain.Entities.Payment payment, Booking booking)
     {
-        var tick = DateTime.Now.Ticks.ToString();
-
         var vnpay = new VnPayLibrary();
+        var tmnCode = GetRequiredSetting("VnPay:TmnCode");
+        var returnUrl = GetRequiredSetting("VnPay:PaymentBackReturnUrl");
+        var baseUrl = GetRequiredSetting("VnPay:BaseUrl");
+        var hashSecret = GetRequiredSetting("VnPay:HashSecret");
 
         vnpay.AddRequestData("vnp_Version", "2.1.0");
         vnpay.AddRequestData("vnp_Command", "pay");
-        vnpay.AddRequestData("vnp_TmnCode", _configuration["VnPay:TmnCode"]);
+        vnpay.AddRequestData("vnp_TmnCode", tmnCode);
         // Amount must be multiplied by 100
         vnpay.AddRequestData("vnp_Amount", (payment.Amount * 100).ToString("0")); 
         
@@ -34,12 +36,12 @@ public class VnPayService : IVnPayService
 
         vnpay.AddRequestData("vnp_OrderInfo", "ThanhToanDonHang" + booking.Id.ToString("N"));
         vnpay.AddRequestData("vnp_OrderType", "other"); //default value: other
-        vnpay.AddRequestData("vnp_ReturnUrl", _configuration["VnPay:PaymentBackReturnUrl"]);
+        vnpay.AddRequestData("vnp_ReturnUrl", returnUrl);
         
         // Use Payment.Id as TxnRef to map when callback returns, removing hyphens to be safe
         vnpay.AddRequestData("vnp_TxnRef", payment.Id.ToString("N"));
 
-        var paymentUrl = vnpay.CreateRequestUrl(_configuration["VnPay:BaseUrl"], _configuration["VnPay:HashSecret"]);
+        var paymentUrl = vnpay.CreateRequestUrl(baseUrl, hashSecret);
 
         return paymentUrl;
     }
@@ -56,12 +58,14 @@ public class VnPayService : IVnPayService
         }
 
         var vnp_orderId = vnpay.GetResponseData("vnp_TxnRef");
-        var vnp_TransactionId = Convert.ToInt64(vnpay.GetResponseData("vnp_TransactionNo"));
+        var transactionNumber = vnpay.GetResponseData("vnp_TransactionNo");
+        var amountValue = vnpay.GetResponseData("vnp_Amount");
         var vnp_SecureHash = collections.FirstOrDefault(p => p.Key == "vnp_SecureHash").Value;
         var vnp_ResponseCode = vnpay.GetResponseData("vnp_ResponseCode");
         var vnp_OrderInfo = vnpay.GetResponseData("vnp_OrderInfo");
 
-        bool checkSignature = vnpay.ValidateSignature(vnp_SecureHash, _configuration["VnPay:HashSecret"]);
+        var hashSecret = GetRequiredSetting("VnPay:HashSecret");
+        bool checkSignature = vnpay.ValidateSignature(vnp_SecureHash, hashSecret);
         if (!checkSignature)
         {
             return new VnPayResponseModel
@@ -70,15 +74,28 @@ public class VnPayService : IVnPayService
             };
         }
 
+        if (!long.TryParse(transactionNumber, out var transactionId)
+            || !decimal.TryParse(amountValue, out var amount))
+        {
+            return new VnPayResponseModel { Success = false };
+        }
+
         return new VnPayResponseModel
         {
             Success = true,
             PaymentMethod = "VnPay",
             OrderDescription = vnp_OrderInfo,
             OrderId = vnp_orderId,
-            TransactionId = vnp_TransactionId.ToString(),
+            TransactionId = transactionId.ToString(),
             Token = vnp_SecureHash,
-            VnPayResponseCode = vnp_ResponseCode
+            VnPayResponseCode = vnp_ResponseCode,
+            Amount = amount / 100m
         };
+    }
+
+    private string GetRequiredSetting(string key)
+    {
+        return _configuration[key]
+            ?? throw new InvalidOperationException($"Configuration value '{key}' is missing.");
     }
 }

@@ -23,7 +23,10 @@ public class EfCrudService<TEntity, TDto> : ICrudService<TEntity, TDto>
 
     public virtual async Task<IReadOnlyList<TDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        var entities = await _dbSet.AsNoTracking().ToListAsync(cancellationToken);
+        var entities = await _dbSet
+            .AsNoTracking()
+            .Take(200)
+            .ToListAsync(cancellationToken);
         return entities.Select(e => _mapper.Map<TDto>(e)).ToList();
     }
 

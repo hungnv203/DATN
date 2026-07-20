@@ -29,6 +29,7 @@ public class MovieReviewService : IMovieReviewService
             .AsNoTracking()
             .Include(r => r.User)
             .OrderByDescending(r => r.CreatedAt)
+            .Take(200)
             .ToListAsync(cancellationToken);
 
         return reviews.Select(r => _mapper.Map<MovieReviewDto>(r)).ToList();
@@ -43,6 +44,7 @@ public class MovieReviewService : IMovieReviewService
             .Include(r => r.User)
             .Where(r => r.MovieId == movieId && r.Status == "Visible")
             .OrderByDescending(r => r.CreatedAt)
+            .Take(100)
             .ToListAsync(cancellationToken);
 
         return reviews.Select(r => _mapper.Map<MovieReviewDto>(r)).ToList();

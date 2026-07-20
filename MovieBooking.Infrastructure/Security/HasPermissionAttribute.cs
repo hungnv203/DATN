@@ -23,6 +23,11 @@ public class HasPermissionAttribute : Attribute, IAsyncAuthorizationFilter
             return;
         }
 
+        if (context.ActionDescriptor.EndpointMetadata.OfType<SkipPermissionAttribute>().Any())
+        {
+            return;
+        }
+
         var controllerName = context.RouteData.Values["controller"]?.ToString();
         var permissionName = $"Permissions.{controllerName}.{Action}";
 

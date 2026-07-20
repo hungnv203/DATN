@@ -23,18 +23,22 @@ public class UserCrudService : EfCrudService<User, UserDto>
 
     public override async Task<IReadOnlyList<UserDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        var users = await _db.Users.AsNoTracking().ToListAsync(cancellationToken);
-        var dtos = new List<UserDto>();
-        foreach (var user in users)
-        {
-            var dto = _mapper.Map<UserDto>(user);
-            dto.RoleName = await _db.UserRoles
-                .Where(ur => ur.UserId == user.Id)
-                .Select(ur => ur.Role.Name)
-                .FirstOrDefaultAsync(cancellationToken);
-            dtos.Add(dto);
-        }
-        return dtos;
+        return await _db.Users
+            .AsNoTracking()
+            .OrderBy(user => user.Email)
+            .Take(200)
+            .Select(user => new UserDto
+            {
+                Id = user.Id,
+                FullName = user.FullName,
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
+                Status = user.Status,
+                RoleName = user.UserRoles
+                    .Select(userRole => userRole.Role.Name)
+                    .FirstOrDefault()
+            })
+            .ToListAsync(cancellationToken);
     }
 
     public override async Task<UserDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

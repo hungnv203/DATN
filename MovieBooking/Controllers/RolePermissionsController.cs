@@ -6,6 +6,7 @@ using MovieBooking.Domain.Entities;
 namespace MovieBooking.Controllers;
 
 [Route("api/[controller]")]
+[Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 public class RolePermissionsController : CrudController<RolePermission, RolePermissionDto>
 {
     public RolePermissionsController(ICrudService<RolePermission, RolePermissionDto> crudService) : base(crudService)

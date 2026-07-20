@@ -73,9 +73,11 @@ public class ShowtimesController : CrudController<Showtime, ShowtimeDto>
         {
             return NotFound(new { message = ex.Message });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return BadRequest(new { message = ex.Message });
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Unable to load showtime seats.");
         }
     }
 }

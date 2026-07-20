@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading;
@@ -63,7 +64,11 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
             query = query.Where(b => b.UserId == userId);
         }
 
-        var bookings = await query.AsNoTracking().ToListAsync(cancellationToken);
+        var bookings = await query
+            .AsNoTracking()
+            .OrderByDescending(booking => booking.CreatedAt)
+            .Take(200)
+            .ToListAsync(cancellationToken);
         return bookings.Select(b => _mapper.Map<BookingDto>(b)).ToList();
     }
 
@@ -94,7 +99,20 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
         return _mapper.Map<BookingDto>(booking);
     }
 
-    public override async Task<BookingDto> CreateAsync(BookingDto dto, CancellationToken cancellationToken = default)
+    public override Task<BookingDto> CreateAsync(BookingDto dto, CancellationToken cancellationToken = default)
+    {
+        return CreateInternalAsync(dto, false, cancellationToken);
+    }
+
+    public Task<BookingDto> CreatePointOfSaleAsync(BookingDto dto, CancellationToken cancellationToken = default)
+    {
+        return CreateInternalAsync(dto, true, cancellationToken);
+    }
+
+    private async Task<BookingDto> CreateInternalAsync(
+        BookingDto dto,
+        bool isPointOfSale,
+        CancellationToken cancellationToken)
     {
         var httpContext = _httpContextAccessor.HttpContext;
         Guid currentUserId = Guid.Empty;
@@ -106,6 +124,15 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
                 currentUserId = parsedId;
             }
         }
+
+        if (currentUserId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Authentication is required to create a booking.");
+        }
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
 
         // Validate showtime
         var showtime = await _db.Showtimes.Include(s => s.Room).FirstOrDefaultAsync(s => s.Id == dto.ShowtimeId, cancellationToken);
@@ -120,11 +147,10 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
         }
 
         // If UserId is not provided or is empty, assign current user ID
-        var finalUserId = dto.UserId == Guid.Empty ? currentUserId : dto.UserId;
-        if (finalUserId == Guid.Empty)
-        {
-            throw new InvalidOperationException("Vui lòng đăng nhập để đặt vé.");
-        }
+        var finalUserId = isPointOfSale && dto.UserId != Guid.Empty
+            ? dto.UserId
+            : currentUserId;
+        var bookingStatus = isPointOfSale ? "Paid" : "Pending";
 
         // Fetch all seats
         var seats = await _db.Seats.Where(s => dto.SeatIds.Contains(s.Id) && s.RoomId == showtime.RoomId).ToListAsync(cancellationToken);
@@ -238,13 +264,13 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
         {
             UserId = finalUserId,
             ShowtimeId = dto.ShowtimeId,
-            Status = dto.Status ?? "Pending",
+            Status = bookingStatus,
             Subtotal = quote.Subtotal,
             DiscountAmount = quote.DiscountAmount,
             PointDiscountAmount = quote.PointDiscountAmount,
             UsedPoints = quote.UsedPoints,
             TotalPrice = quote.TotalPrice,
-            ExpiredAt = (dto.Status == "Paid") ? null : DateTime.UtcNow.AddMinutes(5), // If paid (POS), no expiration. If pending (Online), expires in 5 mins
+            ExpiredAt = isPointOfSale ? null : DateTime.UtcNow.AddMinutes(5),
             Tickets = tickets,
             BookingConcessions = bookingConcessions,
             BookingPromotions = bookingPromotions
@@ -268,6 +294,8 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
             await _db.SaveChangesAsync(cancellationToken);
         }
 
+        await transaction.CommitAsync(cancellationToken);
+
         var resultDto = _mapper.Map<BookingDto>(booking);
         resultDto.SeatIds = dto.SeatIds; // Preserve seat IDs in result
         resultDto.PromotionCode = dto.PromotionCode;
@@ -288,6 +316,10 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
         {
             return new SeatHoldResultDto { Success = false, Message = "Vui lòng đăng nhập để giữ ghế." };
         }
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
 
         // Validate showtime
         var showtimeExists = await _db.Showtimes.AnyAsync(s => s.Id == request.ShowtimeId, cancellationToken);
@@ -351,6 +383,7 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
 
         await _db.SeatHolds.AddRangeAsync(newHolds, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return new SeatHoldResultDto
         {

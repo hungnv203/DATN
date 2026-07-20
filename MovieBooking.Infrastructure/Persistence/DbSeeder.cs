@@ -1,12 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Domain.Entities;
+using Microsoft.Extensions.Configuration;
 
 namespace MovieBooking.Infrastructure.Persistence;
 
 public static class DbSeeder
 {
-    public static async Task SeedAsync(AppDbContext db, IPasswordHasher passwordHasher)
+    public static async Task SeedAsync(
+        AppDbContext db,
+        IPasswordHasher passwordHasher,
+        IConfiguration configuration)
     {
         // 1. Seed Roles
         var defaultRoles = new[]
@@ -40,7 +44,13 @@ public static class DbSeeder
         }
 
         // 2. Seed Admin User
-        var adminEmail = "admin@gmail.com";
+        var adminEmail = configuration["SeedAdmin:Email"]?.Trim().ToLowerInvariant();
+        var adminPassword = configuration["SeedAdmin:Password"];
+        if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
+        {
+            throw new InvalidOperationException(
+                "SeedAdmin credentials must be configured when database seeding is enabled.");
+        }
         var adminUser = await db.Users
             .FirstOrDefaultAsync(u => u.Email.ToLower() == adminEmail.ToLower());
 
@@ -51,7 +61,7 @@ public static class DbSeeder
                 FullName = "admin",
                 Email = adminEmail,
                 PhoneNumber = "0123456789",
-                PasswordHash = passwordHasher.Hash("admin123"),
+                PasswordHash = passwordHasher.Hash(adminPassword),
                 Status = "Active"
             };
 
@@ -77,7 +87,7 @@ public static class DbSeeder
             "Roles", "Rooms", "SeatHolds", "Seats", "Showtimes", "Tickets",
             "UserRoles", "Users"
         };
-        var actions = new[] { "Create", "Update", "Delete" };
+        var actions = new[] { "Read", "Create", "Update", "Delete" };
 
         var dbPermissions = await db.Permissions.ToListAsync();
         var permissionsToAdd = new List<Permission>();
@@ -103,5 +113,26 @@ public static class DbSeeder
             db.Permissions.AddRange(permissionsToAdd);
             await db.SaveChangesAsync();
         }
+
+        var specializedPermissions = new[]
+        {
+            "Permissions.Payments.Refund",
+            "Permissions.Tickets.CheckIn",
+            "Permissions.Upload.Upload"
+        };
+        foreach (var permissionName in specializedPermissions)
+        {
+            if (!dbPermissions.Any(permission => permission.Name == permissionName)
+                && !permissionsToAdd.Any(permission => permission.Name == permissionName))
+            {
+                db.Permissions.Add(new Permission
+                {
+                    Name = permissionName,
+                    Description = $"Specialized permission: {permissionName}"
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
     }
 }

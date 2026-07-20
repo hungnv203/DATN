@@ -92,7 +92,7 @@ public class VnPayLibrary
 
 public class VnPayCompare : IComparer<string>
 {
-    public int Compare(string x, string y)
+    public int Compare(string? x, string? y)
     {
         if (x == y) return 0;
         if (x == null) return -1;
@@ -137,7 +137,7 @@ public class Utils
                 return ipAddress;
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return "127.0.0.1";
         }

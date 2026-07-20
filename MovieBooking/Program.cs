@@ -41,16 +41,23 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll",
+    options.AddPolicy("ConfiguredOrigins",
         policy =>
         {
-            policy.AllowAnyOrigin()
-                  .AllowAnyMethod()
-                  .AllowAnyHeader();
+            var origins = builder.Configuration
+                .GetSection("Cors:AllowedOrigins")
+                .Get<string[]>() ?? [];
+            if (origins.Length > 0)
+            {
+                policy.WithOrigins(origins)
+                    .AllowAnyMethod()
+                    .AllowAnyHeader();
+            }
         });
 });
 
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -72,30 +79,41 @@ builder.Services.AddSwaggerGen(options =>
     {
         [new OpenApiSecuritySchemeReference(securityId, document)] = []
     });
-}); builder.Services.AddSwaggerGen();
+});
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
+if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
+    await db.Database.MigrateAsync();
+}
 
+if (builder.Configuration.GetValue<bool>("Database:SeedOnStartup"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-    await DbSeeder.SeedAsync(db, passwordHasher);
+    await DbSeeder.SeedAsync(db, passwordHasher, builder.Configuration);
 }
 
 
 // Configure the HTTP request pipeline.
-app.MapOpenApi();
-app.UseSwagger();
-app.UseSwaggerUI();
+app.UseExceptionHandler();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 app.UseStaticFiles();
 
 app.UseHttpsRedirection();
 
-app.UseCors("AllowAll");
+app.UseCors("ConfiguredOrigins");
 
 app.UseAuthentication();
 app.UseAuthorization();

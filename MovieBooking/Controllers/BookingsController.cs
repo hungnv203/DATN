@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Domain.Entities;
+using MovieBooking.Infrastructure.Security;
 
 namespace MovieBooking.Controllers;
 
@@ -23,16 +24,48 @@ public class BookingsController : CrudController<Booking, BookingDto>
     }
 
     [HttpPost]
-    [AllowAnonymous]
+    [SkipPermission]
     public override async Task<ActionResult<BookingDto>> Create([FromBody] BookingDto dto, CancellationToken cancellationToken)
     {
         try
         {
-            return await base.Create(dto, cancellationToken);
+            var created = await _bookingService.CreateAsync(dto, cancellationToken);
+            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception)
+        {
+            return Conflict(new
+            {
+                message = "The booking could not be created because availability changed."
+            });
+        }
+    }
+
+    [HttpPost("pos")]
+    [MovieBooking.Infrastructure.Security.HasPermission("Create")]
+    public async Task<ActionResult<BookingDto>> CreatePointOfSale(
+        [FromBody] BookingDto dto,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var created = await _bookingService.CreatePointOfSaleAsync(dto, cancellationToken);
+            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (Exception)
+        {
+            return Conflict(new
+            {
+                message = "The booking could not be created because availability changed."
+            });
         }
     }
 
@@ -48,9 +81,13 @@ public class BookingsController : CrudController<Booking, BookingDto>
             }
             return Ok(result);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return BadRequest(new SeatHoldResultDto { Success = false, Message = ex.Message });
+            return Conflict(new SeatHoldResultDto
+            {
+                Success = false,
+                Message = "The selected seats are no longer available."
+            });
         }
     }
 

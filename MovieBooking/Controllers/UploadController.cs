@@ -11,12 +11,16 @@ namespace MovieBooking.Controllers;
 public class UploadController : ControllerBase
 {
     private readonly IImageUploadService _imageUploadService;
+    private readonly ILogger<UploadController> _logger;
     private readonly string[] _allowedExtensions = [".jpg", ".jpeg", ".png", ".webp"];
     private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
 
-    public UploadController(IImageUploadService imageUploadService)
+    public UploadController(
+        IImageUploadService imageUploadService,
+        ILogger<UploadController> logger)
     {
         _imageUploadService = imageUploadService;
+        _logger = logger;
     }
 
     [HttpPost]
@@ -51,7 +55,10 @@ public class UploadController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            _logger.LogError(ex, "Image upload failed.");
+            return StatusCode(
+                StatusCodes.Status502BadGateway,
+                new { message = "Image upload failed." });
         }
     }
 }

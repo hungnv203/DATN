@@ -1,6 +1,8 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
+using System.Security.Cryptography;
+using System.Text;
 using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.DTOs.Auth;
 using MovieBooking.Application.Common.Interfaces;
@@ -18,19 +20,22 @@ public class UserService : IUserService
     private readonly IJwtTokenGenerator _jwtTokenGenerator;
     private readonly IMapper _mapper;
     private readonly IHostEnvironment _environment;
+    private readonly IPasswordResetEmailSender _passwordResetEmailSender;
 
     public UserService(
         AppDbContext db,
         IPasswordHasher passwordHasher,
         IJwtTokenGenerator jwtTokenGenerator,
         IMapper mapper,
-        IHostEnvironment environment)
+        IHostEnvironment environment,
+        IPasswordResetEmailSender passwordResetEmailSender)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _jwtTokenGenerator = jwtTokenGenerator;
         _mapper = mapper;
         _environment = environment;
+        _passwordResetEmailSender = passwordResetEmailSender;
     }
 
     public async Task<AuthResponseDto> SignUpAsync(SignUpRequest request, CancellationToken cancellationToken = default)
@@ -78,7 +83,9 @@ public class UserService : IUserService
             u => u.Email.ToLower() == normalizedEmail,
             cancellationToken);
 
-        if (user is null || !_passwordHasher.Verify(request.Password, user.PasswordHash))
+        if (user is null
+            || !string.Equals(user.Status, "Active", StringComparison.OrdinalIgnoreCase)
+            || !_passwordHasher.Verify(request.Password, user.PasswordHash))
         {
             return null;
         }
@@ -105,7 +112,7 @@ public class UserService : IUserService
 
         var token = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
         var now = DateTimeOffset.UtcNow;
-        user.SetPasswordReset(token, now.Add(PasswordResetTokenLifetime), now);
+        user.SetPasswordReset(HashResetToken(token), now.Add(PasswordResetTokenLifetime), now);
         await _db.SaveChangesAsync(cancellationToken);
 
         var response = new PasswordResetRequestResponseDto
@@ -116,6 +123,10 @@ public class UserService : IUserService
         if (_environment.IsDevelopment())
         {
             response.ResetToken = token;
+        }
+        else
+        {
+            await _passwordResetEmailSender.SendAsync(user.Email, token, cancellationToken);
         }
 
         return response;
@@ -132,7 +143,7 @@ public class UserService : IUserService
             || user.PasswordResetToken is null
             || user.PasswordResetExpires is null
             || user.PasswordResetExpires < DateTimeOffset.UtcNow
-            || user.PasswordResetToken != request.Token.Trim())
+            || !VerifyResetToken(user.PasswordResetToken, request.Token.Trim()))
         {
             return false;
         }
@@ -141,6 +152,25 @@ public class UserService : IUserService
         user.SetPassword(_passwordHasher.Hash(request.NewPassword), now);
         await _db.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    private static string HashResetToken(string token)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+    }
+
+    private static bool VerifyResetToken(string storedHash, string token)
+    {
+        try
+        {
+            return CryptographicOperations.FixedTimeEquals(
+                Convert.FromHexString(storedHash),
+                Convert.FromHexString(HashResetToken(token)));
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     private AuthResponseDto BuildAuthResponse(User user)

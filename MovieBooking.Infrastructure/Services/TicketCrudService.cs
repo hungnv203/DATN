@@ -50,7 +50,11 @@ public class TicketCrudService : EfCrudService<Ticket, TicketDto>
             query = query.Where(t => t.Booking.UserId == userId);
         }
 
-        var tickets = await query.AsNoTracking().ToListAsync(cancellationToken);
+        var tickets = await query
+            .AsNoTracking()
+            .OrderByDescending(ticket => ticket.CreatedAt)
+            .Take(200)
+            .ToListAsync(cancellationToken);
         return tickets.Select(t => _mapper.Map<TicketDto>(t)).ToList();
     }
 

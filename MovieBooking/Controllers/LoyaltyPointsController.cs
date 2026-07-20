@@ -18,6 +18,21 @@ public class LoyaltyPointsController : CrudController<LoyaltyPoint, LoyaltyPoint
         _loyaltyService = loyaltyService;
     }
 
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    public override Task<ActionResult<IReadOnlyList<LoyaltyPointDto>>> GetAll(
+        CancellationToken cancellationToken)
+    {
+        return base.GetAll(cancellationToken);
+    }
+
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+    public override Task<ActionResult<LoyaltyPointDto>> GetById(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return base.GetById(id, cancellationToken);
+    }
+
     [HttpGet("me")]
     public async Task<ActionResult<LoyaltyWalletDto>> GetMyWallet(CancellationToken cancellationToken)
     {

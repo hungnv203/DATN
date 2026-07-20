@@ -41,19 +41,13 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("ConfiguredOrigins",
-        policy =>
-        {
-            var origins = builder.Configuration
-                .GetSection("Cors:AllowedOrigins")
-                .Get<string[]>() ?? [];
-            if (origins.Length > 0)
-            {
-                policy.WithOrigins(origins)
-                    .AllowAnyMethod()
-                    .AllowAnyHeader();
-            }
-        });
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
 });
 
 builder.Services.AddControllers();
@@ -113,7 +107,7 @@ app.UseStaticFiles();
 
 app.UseHttpsRedirection();
 
-app.UseCors("ConfiguredOrigins");
+app.UseCors("AllowAll");
 
 app.UseAuthentication();
 app.UseAuthorization();

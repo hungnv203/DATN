@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Persistence;
 
 namespace MovieBooking.Infrastructure.Services;
@@ -37,13 +38,19 @@ public class ExpiredSeatHoldsCleanupService : BackgroundService
 
                     var now = DateTime.UtcNow;
                     var expiredHolds = await dbContext.SeatHolds
-                        .Where(sh => sh.ExpiredAt <= now)
+                        .Where(sh => sh.Status == SeatHoldStatuses.Active
+                                     && sh.ExpiredAt <= now)
                         .ToListAsync(stoppingToken);
 
                     if (expiredHolds.Any())
                     {
-                        _logger.LogInformation("Found {Count} expired seat holds. Deleting...", expiredHolds.Count);
-                        dbContext.SeatHolds.RemoveRange(expiredHolds);
+                        _logger.LogInformation(
+                            "Found {Count} expired seat holds. Updating status...",
+                            expiredHolds.Count);
+                        foreach (var hold in expiredHolds)
+                        {
+                            hold.Status = SeatHoldStatuses.Expired;
+                        }
                         await dbContext.SaveChangesAsync(stoppingToken);
                     }
                 }

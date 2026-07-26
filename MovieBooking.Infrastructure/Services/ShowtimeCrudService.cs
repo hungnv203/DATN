@@ -116,7 +116,9 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
 
         var activeHolds = await _dbContext.SeatHolds
             .AsNoTracking()
-            .Where(sh => sh.ShowtimeId == showtimeId && sh.ExpiredAt > DateTime.UtcNow)
+            .Where(sh => sh.ShowtimeId == showtimeId
+                         && sh.Status == SeatHoldStatuses.Active
+                         && sh.ExpiredAt > DateTime.UtcNow)
             .ToListAsync(cancellationToken);
 
         var holdMap = activeHolds.ToDictionary(sh => sh.SeatId, sh => sh.UserId);

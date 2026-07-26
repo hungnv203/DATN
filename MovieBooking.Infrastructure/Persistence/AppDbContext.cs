@@ -85,6 +85,18 @@ public class AppDbContext : DbContext
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<SeatHold>()
+            .HasOne(x => x.Booking)
+            .WithMany()
+            .HasForeignKey(x => x.BookingId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<SeatHold>()
+            .HasIndex(x => new { x.ShowtimeId, x.SeatId, x.Status, x.ExpiredAt });
+
+        modelBuilder.Entity<SeatHold>()
+            .HasIndex(x => new { x.SessionId, x.Status });
+
         modelBuilder.Entity<LoyaltyPoint>()
             .HasOne(x => x.User)
             .WithOne(x => x.LoyaltyPoint)

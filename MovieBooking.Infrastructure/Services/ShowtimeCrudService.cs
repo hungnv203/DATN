@@ -121,7 +121,14 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
                          && sh.ExpiredAt > DateTime.UtcNow)
             .ToListAsync(cancellationToken);
 
-        var holdMap = activeHolds.ToDictionary(sh => sh.SeatId, sh => sh.UserId);
+        var holdMap = activeHolds
+            .GroupBy(hold => hold.SeatId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(hold => hold.CreatedAt)
+                    .First()
+                    .UserId);
 
         var result = seats.Select(s => new ShowtimeSeatDto
         {
@@ -136,5 +143,58 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
         }).OrderBy(s => s.RowLabel).ThenBy(s => s.SeatNumber).ToList();
 
         return result;
+    }
+
+    public async Task<ShowtimeSeatDto?> GetSeatForShowtimeAsync(
+        Guid showtimeId,
+        Guid seatId,
+        CancellationToken cancellationToken = default)
+    {
+        var seat = await _dbContext.Seats
+            .AsNoTracking()
+            .Where(item => item.Id == seatId)
+            .Join(
+                _dbContext.Showtimes.AsNoTracking()
+                    .Where(showtime => showtime.Id == showtimeId),
+                item => item.RoomId,
+                showtime => showtime.RoomId,
+                (item, _) => item)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (seat == null)
+        {
+            return null;
+        }
+
+        var isReserved = await _dbContext.Tickets
+            .AsNoTracking()
+            .Include(ticket => ticket.Booking)
+            .AnyAsync(
+                ticket => ticket.SeatId == seatId
+                          && ticket.Booking.ShowtimeId == showtimeId
+                          && ticket.Booking.Status != "Cancelled"
+                          && ticket.Booking.Status != "Expired",
+                cancellationToken);
+
+        var activeHold = await _dbContext.SeatHolds
+            .AsNoTracking()
+            .Where(hold => hold.SeatId == seatId
+                           && hold.ShowtimeId == showtimeId
+                           && hold.Status == SeatHoldStatuses.Active
+                           && hold.ExpiredAt > DateTime.UtcNow)
+            .OrderByDescending(hold => hold.CreatedAt)
+            .Select(hold => new { hold.UserId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new ShowtimeSeatDto
+        {
+            SeatId = seat.Id,
+            RowLabel = seat.RowLabel,
+            SeatNumber = seat.SeatNumber,
+            Type = seat.Type,
+            Status = isReserved
+                ? "Reserved"
+                : activeHold == null ? "Available" : "Held",
+            HeldByUserId = activeHold?.UserId
+        };
     }
 }

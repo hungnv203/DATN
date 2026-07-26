@@ -80,4 +80,18 @@ public class ShowtimesController : CrudController<Showtime, ShowtimeDto>
                 title: "Unable to load showtime seats.");
         }
     }
+
+    [AllowAnonymous]
+    [HttpGet("{showtimeId:guid}/seats/{seatId:guid}")]
+    public async Task<ActionResult<ShowtimeSeatDto>> GetSeatForShowtime(
+        Guid showtimeId,
+        Guid seatId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _showtimeService.GetSeatForShowtimeAsync(
+            showtimeId,
+            seatId,
+            cancellationToken);
+        return result == null ? NotFound() : Ok(result);
+    }
 }

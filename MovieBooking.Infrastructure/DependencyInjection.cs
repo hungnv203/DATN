@@ -42,6 +42,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
         services.AddScoped<ICrudService<Ticket, TicketDto>, TicketCrudService>();
         services.AddScoped<IShowtimeService, ShowtimeCrudService>();
+        services.AddScoped<ISeatLayoutService, SeatLayoutService>();
         services.AddScoped<ICrudService<Showtime, ShowtimeDto>>(provider => provider.GetRequiredService<IShowtimeService>());
         services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();

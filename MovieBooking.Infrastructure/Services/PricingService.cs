@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
+using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Persistence;
 
 namespace MovieBooking.Infrastructure.Services;

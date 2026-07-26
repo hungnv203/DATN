@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MovieBooking.Application.Common.Interfaces;
+using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Persistence;
 
 namespace MovieBooking.Infrastructure.Services;
@@ -50,6 +51,17 @@ public class ExpiredBookingsCleanupService : BackgroundService
                         "Found {Count} expired bookings. Marking as expired...",
                         expiredBookings.Count);
 
+                    var expiredBookingIds = expiredBookings
+                        .Select(booking => booking.Id)
+                        .ToList();
+                    var completedHolds = await dbContext.SeatHolds
+                        .Where(hold => hold.BookingId != null
+                                       && expiredBookingIds.Contains(
+                                           hold.BookingId.Value)
+                                       && hold.Status ==
+                                           SeatHoldStatuses.Completed)
+                        .ToListAsync(stoppingToken);
+
                     foreach (var booking in expiredBookings)
                     {
                         booking.Status = "Expired";
@@ -65,6 +77,12 @@ public class ExpiredBookingsCleanupService : BackgroundService
                         }
 
                         await loyaltyService.ReturnRedeemedPointsAsync(booking.Id, stoppingToken);
+                    }
+
+                    foreach (var hold in completedHolds)
+                    {
+                        hold.Status = SeatHoldStatuses.Released;
+                        hold.ReleasedAt = now;
                     }
 
                     await dbContext.SaveChangesAsync(stoppingToken);

@@ -17,7 +17,7 @@ namespace MovieBooking.Infrastructure.Services;
 
 public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingService
 {
-    private static readonly TimeSpan SeatHoldDuration = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan SeatHoldDuration = TimeSpan.FromMinutes(5);
 
     private readonly AppDbContext _db;
     private readonly IMapper _mapper;
@@ -295,6 +295,11 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
         {
             throw new InvalidOperationException(
                 "An active hold is required for every selected seat.");
+        }
+
+        if (!isPointOfSale)
+        {
+            booking.ExpiredAt = holdsToComplete.Min(hold => hold.ExpiredAt);
         }
 
         foreach (var hold in holdsToComplete)

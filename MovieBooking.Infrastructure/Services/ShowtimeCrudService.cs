@@ -185,6 +185,17 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
             .Select(hold => new { hold.UserId })
             .FirstOrDefaultAsync(cancellationToken);
 
+        var latestInactiveHoldStatus = activeHold == null
+            ? await _dbContext.SeatHolds
+                .AsNoTracking()
+                .Where(hold => hold.SeatId == seatId
+                               && hold.ShowtimeId == showtimeId
+                               && hold.Status != SeatHoldStatuses.Active)
+                .OrderByDescending(hold => hold.CreatedAt)
+                .Select(hold => hold.Status)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         return new ShowtimeSeatDto
         {
             SeatId = seat.Id,
@@ -193,7 +204,12 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
             Type = seat.Type,
             Status = isReserved
                 ? "Reserved"
-                : activeHold == null ? "Available" : "Held",
+                : activeHold != null
+                    ? "Held"
+                    : latestInactiveHoldStatus is SeatHoldStatuses.Released
+                        or SeatHoldStatuses.Expired
+                        ? "Released"
+                        : "Available",
             HeldByUserId = activeHold?.UserId
         };
     }

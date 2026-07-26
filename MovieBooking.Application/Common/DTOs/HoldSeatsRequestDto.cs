@@ -6,6 +6,5 @@ namespace MovieBooking.Application.Common.DTOs;
 public class HoldSeatsRequestDto
 {
     public Guid ShowtimeId { get; set; }
-    public Guid? HoldSessionId { get; set; }
     public List<Guid> SeatIds { get; set; } = new();
 }

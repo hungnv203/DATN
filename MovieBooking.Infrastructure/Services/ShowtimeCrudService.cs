@@ -87,10 +87,7 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
         }
     }
 
-    public async Task<IReadOnlyList<ShowtimeSeatDto>> GetSeatsForShowtimeAsync(
-        Guid showtimeId,
-        Guid? currentUserId = null,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ShowtimeSeatDto>> GetSeatsForShowtimeAsync(Guid showtimeId, CancellationToken cancellationToken = default)
     {
         var showtime = await _dbContext.Showtimes
             .AsNoTracking()
@@ -119,19 +116,10 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
 
         var activeHolds = await _dbContext.SeatHolds
             .AsNoTracking()
-            .Where(sh => sh.ShowtimeId == showtimeId
-                         && sh.Status == SeatHoldStatuses.Active
-                         && sh.ExpiredAt > DateTime.UtcNow)
+            .Where(sh => sh.ShowtimeId == showtimeId && sh.ExpiredAt > DateTime.UtcNow)
             .ToListAsync(cancellationToken);
 
-        var holdMap = activeHolds
-            .GroupBy(hold => hold.SeatId)
-            .ToDictionary(
-                group => group.Key,
-                group => group
-                    .OrderByDescending(hold => hold.CreatedAt)
-                    .First()
-                    .UserId);
+        var holdMap = activeHolds.ToDictionary(sh => sh.SeatId, sh => sh.UserId);
 
         var result = seats.Select(s => new ShowtimeSeatDto
         {
@@ -142,84 +130,9 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
             Status = reservedSeatIdsSet.Contains(s.Id) 
                 ? "Reserved" 
                 : (holdMap.TryGetValue(s.Id, out var userId) ? "Held" : "Available"),
-            HeldByUserId = holdMap.TryGetValue(s.Id, out var uId) ? uId : null,
-            IsHeldByCurrentUser = currentUserId.HasValue
-                && holdMap.TryGetValue(s.Id, out var holderId)
-                && holderId == currentUserId.Value
+            HeldByUserId = holdMap.TryGetValue(s.Id, out var uId) ? uId : null
         }).OrderBy(s => s.RowLabel).ThenBy(s => s.SeatNumber).ToList();
 
         return result;
-    }
-
-    public async Task<ShowtimeSeatDto?> GetSeatForShowtimeAsync(
-        Guid showtimeId,
-        Guid seatId,
-        Guid? currentUserId = null,
-        CancellationToken cancellationToken = default)
-    {
-        var seat = await _dbContext.Seats
-            .AsNoTracking()
-            .Where(item => item.Id == seatId)
-            .Join(
-                _dbContext.Showtimes.AsNoTracking()
-                    .Where(showtime => showtime.Id == showtimeId),
-                item => item.RoomId,
-                showtime => showtime.RoomId,
-                (item, _) => item)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (seat == null)
-        {
-            return null;
-        }
-
-        var isReserved = await _dbContext.Tickets
-            .AsNoTracking()
-            .Include(ticket => ticket.Booking)
-            .AnyAsync(
-                ticket => ticket.SeatId == seatId
-                          && ticket.Booking.ShowtimeId == showtimeId
-                          && ticket.Booking.Status != "Cancelled"
-                          && ticket.Booking.Status != "Expired",
-                cancellationToken);
-
-        var activeHold = await _dbContext.SeatHolds
-            .AsNoTracking()
-            .Where(hold => hold.SeatId == seatId
-                           && hold.ShowtimeId == showtimeId
-                           && hold.Status == SeatHoldStatuses.Active
-                           && hold.ExpiredAt > DateTime.UtcNow)
-            .OrderByDescending(hold => hold.CreatedAt)
-            .Select(hold => new { hold.UserId })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var latestInactiveHoldStatus = activeHold == null
-            ? await _dbContext.SeatHolds
-                .AsNoTracking()
-                .Where(hold => hold.SeatId == seatId
-                               && hold.ShowtimeId == showtimeId
-                               && hold.Status != SeatHoldStatuses.Active)
-                .OrderByDescending(hold => hold.CreatedAt)
-                .Select(hold => hold.Status)
-                .FirstOrDefaultAsync(cancellationToken)
-            : null;
-
-        return new ShowtimeSeatDto
-        {
-            SeatId = seat.Id,
-            RowLabel = seat.RowLabel,
-            SeatNumber = seat.SeatNumber,
-            Type = seat.Type,
-            Status = isReserved
-                ? "Reserved"
-                : activeHold != null
-                    ? "Held"
-                    : latestInactiveHoldStatus is SeatHoldStatuses.Released
-                        or SeatHoldStatuses.Expired
-                        ? "Released"
-                        : "Available",
-            HeldByUserId = activeHold?.UserId,
-            IsHeldByCurrentUser = currentUserId.HasValue
-                && activeHold?.UserId == currentUserId.Value
-        };
     }
 }

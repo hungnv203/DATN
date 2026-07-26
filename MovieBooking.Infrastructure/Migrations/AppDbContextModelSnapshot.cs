@@ -703,33 +703,17 @@ namespace MovieBooking.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("BookingId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp without time zone");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("ExpiredAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<DateTime?>("ReleasedAt")
-                        .HasColumnType("timestamp without time zone");
-
                     b.Property<Guid>("SeatId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("SessionId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ShowtimeId")
                         .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -739,15 +723,11 @@ namespace MovieBooking.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BookingId");
-
                     b.HasIndex("SeatId");
 
+                    b.HasIndex("ShowtimeId");
+
                     b.HasIndex("UserId");
-
-                    b.HasIndex("SessionId", "Status");
-
-                    b.HasIndex("ShowtimeId", "SeatId", "Status", "ExpiredAt");
 
                     b.ToTable("SeatHolds");
                 });
@@ -1111,11 +1091,6 @@ namespace MovieBooking.Infrastructure.Migrations
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.SeatHold", b =>
                 {
-                    b.HasOne("MovieBooking.Domain.Entities.Booking", "Booking")
-                        .WithMany()
-                        .HasForeignKey("BookingId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("MovieBooking.Domain.Entities.Seat", "Seat")
                         .WithMany("SeatHolds")
                         .HasForeignKey("SeatId")
@@ -1133,8 +1108,6 @@ namespace MovieBooking.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("Booking");
 
                     b.Navigation("Seat");
 

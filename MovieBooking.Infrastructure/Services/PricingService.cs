@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
-using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Persistence;
 
 namespace MovieBooking.Infrastructure.Services;
@@ -44,35 +43,6 @@ public class PricingService : IPricingService
         if (seats.Count != request.SeatIds.Count)
         {
             throw new InvalidOperationException("Một hoặc nhiều ghế được chọn không hợp lệ.");
-        }
-
-        var reservedSeatExists = await _db.Tickets
-            .AsNoTracking()
-            .Include(ticket => ticket.Booking)
-            .AnyAsync(
-                ticket => request.SeatIds.Contains(ticket.SeatId)
-                          && ticket.Booking.ShowtimeId == request.ShowtimeId
-                          && ticket.Booking.Status != "Cancelled"
-                          && ticket.Booking.Status != "Expired",
-                cancellationToken);
-        if (reservedSeatExists)
-        {
-            throw new InvalidOperationException("One or more selected seats have already been reserved.");
-        }
-
-        var now = DateTime.UtcNow;
-        var heldByAnotherUserExists = await _db.SeatHolds
-            .AsNoTracking()
-            .AnyAsync(
-                hold => request.SeatIds.Contains(hold.SeatId)
-                        && hold.ShowtimeId == request.ShowtimeId
-                        && hold.Status == SeatHoldStatuses.Active
-                        && hold.ExpiredAt > now
-                        && (!userId.HasValue || hold.UserId != userId.Value),
-                cancellationToken);
-        if (heldByAnotherUserExists)
-        {
-            throw new InvalidOperationException("One or more selected seats are currently held by another user.");
         }
 
         var seatTotal = seats.Sum(seat =>

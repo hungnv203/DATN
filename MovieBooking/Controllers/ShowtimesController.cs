@@ -66,10 +66,7 @@ public class ShowtimesController : CrudController<Showtime, ShowtimeDto>
     {
         try
         {
-            var result = await _showtimeService.GetSeatsForShowtimeAsync(
-                showtimeId,
-                GetCurrentUserId(),
-                cancellationToken);
+            var result = await _showtimeService.GetSeatsForShowtimeAsync(showtimeId, cancellationToken);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
@@ -82,30 +79,5 @@ public class ShowtimesController : CrudController<Showtime, ShowtimeDto>
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Unable to load showtime seats.");
         }
-    }
-
-    [AllowAnonymous]
-    [HttpGet("{showtimeId:guid}/seats/{seatId:guid}")]
-    public async Task<ActionResult<ShowtimeSeatDto>> GetSeatForShowtime(
-        Guid showtimeId,
-        Guid seatId,
-        CancellationToken cancellationToken)
-    {
-        var result = await _showtimeService.GetSeatForShowtimeAsync(
-            showtimeId,
-            seatId,
-            GetCurrentUserId(),
-            cancellationToken);
-        return result == null ? NotFound() : Ok(result);
-    }
-
-    private Guid? GetCurrentUserId()
-    {
-        var claim = User.FindFirst(
-                        System.Security.Claims.ClaimTypes.NameIdentifier)
-                    ?? User.FindFirst("sub");
-        return claim != null && Guid.TryParse(claim.Value, out var userId)
-            ? userId
-            : null;
     }
 }

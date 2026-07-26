@@ -17,8 +17,6 @@ namespace MovieBooking.Infrastructure.Services;
 
 public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingService
 {
-    private static readonly TimeSpan SeatHoldDuration = TimeSpan.FromMinutes(5);
-
     private readonly AppDbContext _db;
     private readonly IMapper _mapper;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -152,7 +150,6 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
         var finalUserId = isPointOfSale && dto.UserId != Guid.Empty
             ? dto.UserId
             : currentUserId;
-        var holdOwnerUserId = currentUserId;
         var bookingStatus = isPointOfSale ? "Paid" : "Pending";
 
         // Fetch all seats
@@ -173,9 +170,8 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
 
         var heldSeatIds = await _db.SeatHolds
             .Where(sh => sh.ShowtimeId == dto.ShowtimeId 
-                         && sh.Status == SeatHoldStatuses.Active
                          && sh.ExpiredAt > DateTime.UtcNow 
-                         && sh.UserId != holdOwnerUserId)
+                         && sh.UserId != finalUserId)
             .Select(sh => sh.SeatId)
             .ToListAsync(cancellationToken);
 
@@ -200,7 +196,7 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
                 PromotionCode = dto.PromotionCode,
                 UsedPoints = dto.UsedPoints
             },
-            isPointOfSale ? holdOwnerUserId : finalUserId,
+            finalUserId,
             cancellationToken);
 
         var tickets = new List<Ticket>();
@@ -282,31 +278,13 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
 
         await _db.Bookings.AddAsync(booking, cancellationToken);
 
-        var now = DateTime.UtcNow;
-        var holdsToComplete = await _db.SeatHolds
-            .Where(sh => sh.ShowtimeId == dto.ShowtimeId
-                         && sh.UserId == holdOwnerUserId
-                         && dto.SeatIds.Contains(sh.SeatId)
-                         && sh.Status == SeatHoldStatuses.Active
-                         && sh.ExpiredAt > now)
+        // Delete any existing holds of this user for these seats
+        var holdsToRemove = await _db.SeatHolds
+            .Where(sh => sh.ShowtimeId == dto.ShowtimeId && sh.UserId == finalUserId && dto.SeatIds.Contains(sh.SeatId))
             .ToListAsync(cancellationToken);
-        if (holdsToComplete.Select(hold => hold.SeatId).Distinct().Count()
-            != dto.SeatIds.Distinct().Count())
+        if (holdsToRemove.Any())
         {
-            throw new InvalidOperationException(
-                "An active hold is required for every selected seat.");
-        }
-
-        if (!isPointOfSale)
-        {
-            booking.ExpiredAt = holdsToComplete.Min(hold => hold.ExpiredAt);
-        }
-
-        foreach (var hold in holdsToComplete)
-        {
-            hold.Status = SeatHoldStatuses.Completed;
-            hold.CompletedAt = now;
-            hold.BookingId = booking.Id;
+            _db.SeatHolds.RemoveRange(holdsToRemove);
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -343,76 +321,19 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
             IsolationLevel.Serializable,
             cancellationToken);
 
-        var now = DateTime.UtcNow;
-        var showtime = await _db.Showtimes
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                item => item.Id == request.ShowtimeId,
-                cancellationToken);
-        if (showtime == null)
+        // Validate showtime
+        var showtimeExists = await _db.Showtimes.AnyAsync(s => s.Id == request.ShowtimeId, cancellationToken);
+        if (!showtimeExists)
         {
             return new SeatHoldResultDto { Success = false, Message = "Không tìm thấy suất chiếu." };
         }
 
         if (request.SeatIds == null || request.SeatIds.Count == 0)
         {
-            var holdsToRelease = await _db.SeatHolds
-                .Where(hold => hold.ShowtimeId == request.ShowtimeId
-                               && hold.UserId == userId)
-                .Where(hold => hold.Status == SeatHoldStatuses.Active)
-                .Where(hold => !request.HoldSessionId.HasValue
-                               || hold.SessionId == request.HoldSessionId.Value)
-                .ToListAsync(cancellationToken);
-            foreach (var hold in holdsToRelease)
-            {
-                hold.Status = hold.ExpiredAt <= now
-                    ? SeatHoldStatuses.Expired
-                    : SeatHoldStatuses.Released;
-                if (hold.Status == SeatHoldStatuses.Released)
-                {
-                    hold.ReleasedAt = now;
-                }
-            }
-
-            await _db.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return new SeatHoldResultDto
-            {
-                Success = true,
-                Message = "Seat holds released.",
-                HoldSessionId = request.HoldSessionId,
-                ServerTime = now,
-                Status = SeatHoldStatuses.Released
-            };
+            return new SeatHoldResultDto { Success = false, Message = "Danh sách ghế trống." };
         }
 
-        var requestedSeatIds = request.SeatIds.Distinct().ToList();
-        if (requestedSeatIds.Count != request.SeatIds.Count || requestedSeatIds.Count > 10)
-        {
-            return new SeatHoldResultDto
-            {
-                Success = false,
-                Message = "Seat selection is duplicated or exceeds the maximum of 10 seats.",
-                ServerTime = now
-            };
-        }
-
-        var validSeatCount = await _db.Seats
-            .AsNoTracking()
-            .CountAsync(
-                seat => requestedSeatIds.Contains(seat.Id)
-                        && seat.RoomId == showtime.RoomId,
-                cancellationToken);
-        if (validSeatCount != requestedSeatIds.Count)
-        {
-            return new SeatHoldResultDto
-            {
-                Success = false,
-                Message = "One or more seats do not belong to the showtime room.",
-                ServerTime = now
-            };
-        }
-
+        // Check if seats are already reserved
         var reservedSeatIds = await _db.Tickets
             .Include(t => t.Booking)
             .Where(t => t.Booking.ShowtimeId == request.ShowtimeId 
@@ -421,79 +342,42 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
             .Select(t => t.SeatId)
             .ToListAsync(cancellationToken);
 
+        // Check if seats are already held by OTHER users
         var heldSeatIds = await _db.SeatHolds
             .Where(sh => sh.ShowtimeId == request.ShowtimeId 
-                         && sh.Status == SeatHoldStatuses.Active
-                         && sh.ExpiredAt > now
+                         && sh.ExpiredAt > DateTime.UtcNow 
                          && sh.UserId != userId)
             .Select(sh => sh.SeatId)
             .ToListAsync(cancellationToken);
 
-        foreach (var seatId in requestedSeatIds)
+        foreach (var seatId in request.SeatIds)
         {
             if (reservedSeatIds.Contains(seatId))
             {
-                return new SeatHoldResultDto
-                {
-                    Success = false,
-                    Message = "One or more seats have already been reserved.",
-                    ServerTime = now
-                };
+                return new SeatHoldResultDto { Success = false, Message = $"Ghế đã được đặt." };
             }
             if (heldSeatIds.Contains(seatId))
             {
-                return new SeatHoldResultDto
-                {
-                    Success = false,
-                    Message = "One or more seats are held by another user.",
-                    ServerTime = now
-                };
+                return new SeatHoldResultDto { Success = false, Message = $"Ghế đang được giữ bởi người khác." };
             }
         }
 
+        // Release user's previous holds for this showtime
         var existingHolds = await _db.SeatHolds
-            .Where(sh => sh.ShowtimeId == request.ShowtimeId
-                         && sh.UserId == userId
-                         && sh.Status == SeatHoldStatuses.Active)
+            .Where(sh => sh.ShowtimeId == request.ShowtimeId && sh.UserId == userId)
             .ToListAsync(cancellationToken);
-
-        foreach (var expiredHold in existingHolds.Where(hold => hold.ExpiredAt <= now))
+        if (existingHolds.Any())
         {
-            expiredHold.Status = SeatHoldStatuses.Expired;
+            _db.SeatHolds.RemoveRange(existingHolds);
         }
 
-        var activeHolds = existingHolds
-            .Where(hold => hold.ExpiredAt > now)
-            .ToList();
-        var requestedSession = request.HoldSessionId.HasValue
-            ? activeHolds.FirstOrDefault(
-                hold => hold.SessionId == request.HoldSessionId.Value)
-            : activeHolds.FirstOrDefault();
-        var sessionId = requestedSession?.SessionId ?? Guid.NewGuid();
-        var expiry = requestedSession?.ExpiredAt ?? now.Add(SeatHoldDuration);
-
-        foreach (var hold in activeHolds.Where(
-                     hold => hold.SessionId != sessionId
-                             || !requestedSeatIds.Contains(hold.SeatId)))
+        // Create new holds
+        var expiry = DateTime.UtcNow.AddMinutes(5);
+        var newHolds = request.SeatIds.Select(seatId => new SeatHold
         {
-            hold.Status = SeatHoldStatuses.Released;
-            hold.ReleasedAt = now;
-        }
-
-        var alreadyHeldSeatIds = activeHolds
-            .Where(hold => hold.SessionId == sessionId
-                           && requestedSeatIds.Contains(hold.SeatId))
-            .Select(hold => hold.SeatId)
-            .ToHashSet();
-        var newHolds = requestedSeatIds
-            .Where(seatId => !alreadyHeldSeatIds.Contains(seatId))
-            .Select(seatId => new SeatHold
-        {
-            SessionId = sessionId,
             ShowtimeId = request.ShowtimeId,
             SeatId = seatId,
             UserId = userId,
-            Status = SeatHoldStatuses.Active,
             ExpiredAt = expiry
         }).ToList();
 
@@ -505,10 +389,7 @@ public class BookingCrudService : EfCrudService<Booking, BookingDto>, IBookingSe
         {
             Success = true,
             Message = "Giữ ghế thành công.",
-            HoldSessionId = sessionId,
-            ServerTime = now,
-            ExpiredAt = expiry,
-            Status = SeatHoldStatuses.Active
+            ExpiredAt = expiry
         };
     }
 

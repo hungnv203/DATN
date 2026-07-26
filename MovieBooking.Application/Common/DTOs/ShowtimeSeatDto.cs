@@ -10,4 +10,5 @@ public class ShowtimeSeatDto
     public string Type { get; set; } = string.Empty; // Standard, VIP, Couple
     public string Status { get; set; } = string.Empty; // Available, Reserved, Held
     public Guid? HeldByUserId { get; set; }
+    public bool IsHeldByCurrentUser { get; set; }
 }

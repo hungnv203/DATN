@@ -87,7 +87,10 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
         }
     }
 
-    public async Task<IReadOnlyList<ShowtimeSeatDto>> GetSeatsForShowtimeAsync(Guid showtimeId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ShowtimeSeatDto>> GetSeatsForShowtimeAsync(
+        Guid showtimeId,
+        Guid? currentUserId = null,
+        CancellationToken cancellationToken = default)
     {
         var showtime = await _dbContext.Showtimes
             .AsNoTracking()
@@ -139,7 +142,10 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
             Status = reservedSeatIdsSet.Contains(s.Id) 
                 ? "Reserved" 
                 : (holdMap.TryGetValue(s.Id, out var userId) ? "Held" : "Available"),
-            HeldByUserId = holdMap.TryGetValue(s.Id, out var uId) ? uId : null
+            HeldByUserId = holdMap.TryGetValue(s.Id, out var uId) ? uId : null,
+            IsHeldByCurrentUser = currentUserId.HasValue
+                && holdMap.TryGetValue(s.Id, out var holderId)
+                && holderId == currentUserId.Value
         }).OrderBy(s => s.RowLabel).ThenBy(s => s.SeatNumber).ToList();
 
         return result;
@@ -148,6 +154,7 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
     public async Task<ShowtimeSeatDto?> GetSeatForShowtimeAsync(
         Guid showtimeId,
         Guid seatId,
+        Guid? currentUserId = null,
         CancellationToken cancellationToken = default)
     {
         var seat = await _dbContext.Seats
@@ -210,7 +217,9 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
                         or SeatHoldStatuses.Expired
                         ? "Released"
                         : "Available",
-            HeldByUserId = activeHold?.UserId
+            HeldByUserId = activeHold?.UserId,
+            IsHeldByCurrentUser = currentUserId.HasValue
+                && activeHold?.UserId == currentUserId.Value
         };
     }
 }

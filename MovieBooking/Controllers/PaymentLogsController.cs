@@ -10,5 +10,6 @@ namespace MovieBooking.Controllers;
 [Authorize(Roles = "Admin")]
 public class PaymentLogsController : CrudController<PaymentLog, PaymentLogDto>
 {
-    public PaymentLogsController(ICrudService<PaymentLog, PaymentLogDto> crudService) : base(crudService) { }
+    public PaymentLogsController(IPaymentLogService crudService) : base(crudService) { }
 }
+

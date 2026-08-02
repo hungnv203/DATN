@@ -9,5 +9,6 @@ namespace MovieBooking.Controllers;
 [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 public class SeatHoldsController : CrudController<SeatHold, SeatHoldDto>
 {
-    public SeatHoldsController(ICrudService<SeatHold, SeatHoldDto> crudService) : base(crudService) { }
+    public SeatHoldsController(ISeatHoldService crudService) : base(crudService) { }
 }
+

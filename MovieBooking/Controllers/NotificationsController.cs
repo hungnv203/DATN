@@ -9,5 +9,6 @@ namespace MovieBooking.Controllers;
 [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 public class NotificationsController : CrudController<Notification, NotificationDto>
 {
-    public NotificationsController(ICrudService<Notification, NotificationDto> crudService) : base(crudService) { }
+    public NotificationsController(INotificationService crudService) : base(crudService) { }
 }
+

@@ -12,7 +12,7 @@ public class LoyaltyPointsController : CrudController<LoyaltyPoint, LoyaltyPoint
     private readonly ILoyaltyService _loyaltyService;
 
     public LoyaltyPointsController(
-        ICrudService<LoyaltyPoint, LoyaltyPointDto> crudService,
+        ILoyaltyPointService crudService,
         ILoyaltyService loyaltyService) : base(crudService)
     {
         _loyaltyService = loyaltyService;
@@ -46,3 +46,4 @@ public class LoyaltyPointsController : CrudController<LoyaltyPoint, LoyaltyPoint
         return Ok(wallet);
     }
 }
+

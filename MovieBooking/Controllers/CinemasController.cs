@@ -9,7 +9,7 @@ namespace MovieBooking.Controllers;
 [Route("api/cinemas")]
 public class CinemasController : CrudController<Cinema, CinemaDto>
 {
-    public CinemasController(ICrudService<Cinema, CinemaDto> crudService) : base(crudService) { }
+    public CinemasController(ICinemaService crudService) : base(crudService) { }
 
     [AllowAnonymous]
     [HttpGet]
@@ -25,3 +25,4 @@ public class CinemasController : CrudController<Cinema, CinemaDto>
         return await base.GetById(id, cancellationToken);
     }
 }
+

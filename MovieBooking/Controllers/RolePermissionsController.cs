@@ -9,7 +9,8 @@ namespace MovieBooking.Controllers;
 [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 public class RolePermissionsController : CrudController<RolePermission, RolePermissionDto>
 {
-    public RolePermissionsController(ICrudService<RolePermission, RolePermissionDto> crudService) : base(crudService)
+    public RolePermissionsController(IRolePermissionService crudService) : base(crudService)
     {
     }
 }
+

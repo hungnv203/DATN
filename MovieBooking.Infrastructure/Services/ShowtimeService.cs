@@ -12,18 +12,20 @@ using MovieBooking.Infrastructure.Persistence;
 
 namespace MovieBooking.Infrastructure.Services;
 
-public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowtimeService
+public class ShowtimeService : IShowtimeService
 {
+    private readonly EntityCrudOperations<Showtime, ShowtimeDto> _operations;
     private readonly AppDbContext _dbContext;
     private readonly IMapper _mapper;
 
-    public ShowtimeCrudService(AppDbContext dbContext, IMapper mapper) : base(dbContext, mapper)
+    public ShowtimeService(AppDbContext dbContext, IMapper mapper)
     {
+        _operations = new EntityCrudOperations<Showtime, ShowtimeDto>(dbContext, mapper);
         _dbContext = dbContext;
         _mapper = mapper;
     }
 
-    public override async Task<IReadOnlyList<ShowtimeDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ShowtimeDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         var entities = await _dbContext.Showtimes
             .AsNoTracking()
@@ -32,7 +34,7 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
         return _mapper.Map<IReadOnlyList<ShowtimeDto>>(entities);
     }
 
-    public override async Task<ShowtimeDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<ShowtimeDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var entity = await _dbContext.Showtimes
             .AsNoTracking()
@@ -41,24 +43,27 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
         return entity is null ? null : _mapper.Map<ShowtimeDto>(entity);
     }
 
-    public override async Task<ShowtimeDto> CreateAsync(ShowtimeDto dto, CancellationToken cancellationToken = default)
+    public async Task<ShowtimeDto> CreateAsync(ShowtimeDto dto, CancellationToken cancellationToken = default)
     {
         await CheckClashAsync(dto, null, cancellationToken);
-        var created = await base.CreateAsync(dto, cancellationToken);
+        var created = await _operations.CreateAsync(dto, cancellationToken);
         return await GetByIdAsync(created.Id, cancellationToken) ?? created;
     }
 
-    public override async Task<bool> UpdateAsync(Guid id, ShowtimeDto dto, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateAsync(Guid id, ShowtimeDto dto, CancellationToken cancellationToken = default)
     {
         await CheckClashAsync(dto, id, cancellationToken);
-        return await base.UpdateAsync(id, dto, cancellationToken);
+        return await _operations.UpdateAsync(id, dto, cancellationToken);
     }
+
+    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
+        _operations.DeleteAsync(id, cancellationToken);
 
     private async Task CheckClashAsync(ShowtimeDto dto, Guid? excludeId, CancellationToken cancellationToken)
     {
         if (dto.StartTime >= dto.EndTime)
         {
-            throw new InvalidOperationException("Thời gian bắt đầu phải trước thời gian kết thúc.");
+            throw new InvalidOperationException("ThÃ¡Â»Âi gian bÃ¡ÂºÂ¯t Ã„â€˜Ã¡ÂºÂ§u phÃ¡ÂºÂ£i trÃ†Â°Ã¡Â»â€ºc thÃ¡Â»Âi gian kÃ¡ÂºÂ¿t thÃƒÂºc.");
         }
 
         var movie = await _dbContext.Movies
@@ -83,7 +88,7 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
 
         if (clashExists)
         {
-            throw new InvalidOperationException("Xung đột suất chiếu: Phòng chiếu này đã có suất chiếu khác trong khoảng thời gian này.");
+            throw new InvalidOperationException("Xung Ã„â€˜Ã¡Â»â„¢t suÃ¡ÂºÂ¥t chiÃ¡ÂºÂ¿u: PhÃƒÂ²ng chiÃ¡ÂºÂ¿u nÃƒÂ y Ã„â€˜ÃƒÂ£ cÃƒÂ³ suÃ¡ÂºÂ¥t chiÃ¡ÂºÂ¿u khÃƒÂ¡c trong khoÃ¡ÂºÂ£ng thÃ¡Â»Âi gian nÃƒÂ y.");
         }
     }
 
@@ -95,7 +100,7 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
 
         if (showtime == null)
         {
-            throw new KeyNotFoundException("Không tìm thấy suất chiếu.");
+            throw new KeyNotFoundException("KhÃƒÂ´ng tÃƒÂ¬m thÃ¡ÂºÂ¥y suÃ¡ÂºÂ¥t chiÃ¡ÂºÂ¿u.");
         }
 
         var seats = await _dbContext.Seats
@@ -136,3 +141,4 @@ public class ShowtimeCrudService : EfCrudService<Showtime, ShowtimeDto>, IShowti
         return result;
     }
 }
+

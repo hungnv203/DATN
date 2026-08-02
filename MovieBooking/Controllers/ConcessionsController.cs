@@ -11,7 +11,7 @@ namespace MovieBooking.Controllers;
 [HasPermission("ManageConcessions")]
 public class ConcessionsController : CrudController<Concession, ConcessionDto>
 {
-    public ConcessionsController(ICrudService<Concession, ConcessionDto> crudService) : base(crudService) { }
+    public ConcessionsController(IConcessionService crudService) : base(crudService) { }
 
     [AllowAnonymous]
     [HttpGet]
@@ -27,3 +27,4 @@ public class ConcessionsController : CrudController<Concession, ConcessionDto>
         return await base.GetById(id, cancellationToken);
     }
 }
+

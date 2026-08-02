@@ -10,5 +10,6 @@ namespace MovieBooking.Controllers;
 [Authorize(Roles = "Admin")]
 public class RolesController : CrudController<Role, RoleDto>
 {
-    public RolesController(ICrudService<Role, RoleDto> crudService) : base(crudService) { }
+    public RolesController(IRoleService crudService) : base(crudService) { }
 }
+

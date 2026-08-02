@@ -7,21 +7,22 @@ using MovieBooking.Infrastructure.Persistence;
 
 namespace MovieBooking.Infrastructure.Services;
 
-public class UserCrudService : EfCrudService<User, UserDto>
+public class UserManagementService : IUserManagementService
 {
+    private readonly EntityCrudOperations<User, UserDto> _operations;
     private readonly AppDbContext _db;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IMapper _mapper;
 
-    public UserCrudService(AppDbContext db, IMapper mapper, IPasswordHasher passwordHasher) 
-        : base(db, mapper)
+    public UserManagementService(AppDbContext db, IMapper mapper, IPasswordHasher passwordHasher)
     {
+        _operations = new EntityCrudOperations<User, UserDto>(db, mapper);
         _db = db;
         _mapper = mapper;
         _passwordHasher = passwordHasher;
     }
 
-    public override async Task<IReadOnlyList<UserDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UserDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _db.Users
             .AsNoTracking()
@@ -41,7 +42,7 @@ public class UserCrudService : EfCrudService<User, UserDto>
             .ToListAsync(cancellationToken);
     }
 
-    public override async Task<UserDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<UserDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var user = await _db.Users.FindAsync([id], cancellationToken);
         if (user == null) return null;
@@ -54,7 +55,7 @@ public class UserCrudService : EfCrudService<User, UserDto>
         return dto;
     }
 
-    public override async Task<UserDto> CreateAsync(UserDto dto, CancellationToken cancellationToken = default)
+    public async Task<UserDto> CreateAsync(UserDto dto, CancellationToken cancellationToken = default)
     {
         var normalizedEmail = dto.Email.Trim().ToLowerInvariant();
         var emailExists = await _db.Users.AnyAsync(u => u.Email == normalizedEmail, cancellationToken);
@@ -94,7 +95,7 @@ public class UserCrudService : EfCrudService<User, UserDto>
         return resultDto;
     }
 
-    public override async Task<bool> UpdateAsync(Guid id, UserDto dto, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateAsync(Guid id, UserDto dto, CancellationToken cancellationToken = default)
     {
         var user = await _db.Users.FindAsync([id], cancellationToken);
         if (user == null) return false;
@@ -148,4 +149,8 @@ public class UserCrudService : EfCrudService<User, UserDto>
         await _db.SaveChangesAsync(cancellationToken);
         return true;
     }
+
+    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
+        _operations.DeleteAsync(id, cancellationToken);
 }
+

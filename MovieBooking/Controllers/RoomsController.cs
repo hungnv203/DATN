@@ -9,7 +9,7 @@ namespace MovieBooking.Controllers;
 [Route("api/rooms")]
 public class RoomsController : CrudController<Room, RoomDto>
 {
-    public RoomsController(ICrudService<Room, RoomDto> crudService) : base(crudService) { }
+    public RoomsController(IRoomService crudService) : base(crudService) { }
 
     [AllowAnonymous]
     [HttpGet]

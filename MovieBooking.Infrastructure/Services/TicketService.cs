@@ -9,21 +9,22 @@ using MovieBooking.Infrastructure.Persistence;
 
 namespace MovieBooking.Infrastructure.Services;
 
-public class TicketCrudService : EfCrudService<Ticket, TicketDto>
+public class TicketService : ITicketService
 {
+    private readonly EntityCrudOperations<Ticket, TicketDto> _operations;
     private readonly AppDbContext _db;
     private readonly IMapper _mapper;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public TicketCrudService(AppDbContext db, IMapper mapper, IHttpContextAccessor httpContextAccessor)
-        : base(db, mapper)
+    public TicketService(AppDbContext db, IMapper mapper, IHttpContextAccessor httpContextAccessor)
     {
+        _operations = new EntityCrudOperations<Ticket, TicketDto>(db, mapper);
         _db = db;
         _mapper = mapper;
         _httpContextAccessor = httpContextAccessor;
     }
 
-    public override async Task<IReadOnlyList<TicketDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<TicketDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         var httpContext = _httpContextAccessor.HttpContext;
         if (httpContext == null)
@@ -58,7 +59,7 @@ public class TicketCrudService : EfCrudService<Ticket, TicketDto>
         return tickets.Select(t => _mapper.Map<TicketDto>(t)).ToList();
     }
 
-    public override async Task<TicketDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<TicketDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var ticket = await _db.Tickets
             .Include(t => t.Seat)
@@ -85,4 +86,14 @@ public class TicketCrudService : EfCrudService<Ticket, TicketDto>
 
         return _mapper.Map<TicketDto>(ticket);
     }
+
+    public Task<TicketDto> CreateAsync(TicketDto dto, CancellationToken cancellationToken = default) =>
+        _operations.CreateAsync(dto, cancellationToken);
+
+    public Task<bool> UpdateAsync(Guid id, TicketDto dto, CancellationToken cancellationToken = default) =>
+        _operations.UpdateAsync(id, dto, cancellationToken);
+
+    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
+        _operations.DeleteAsync(id, cancellationToken);
 }
+

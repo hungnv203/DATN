@@ -9,5 +9,6 @@ namespace MovieBooking.Controllers;
 [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
 public class PointTransactionsController : CrudController<PointTransaction, PointTransactionDto>
 {
-    public PointTransactionsController(ICrudService<PointTransaction, PointTransactionDto> crudService) : base(crudService) { }
+    public PointTransactionsController(IPointTransactionService crudService) : base(crudService) { }
 }
+

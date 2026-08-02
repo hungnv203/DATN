@@ -13,8 +13,8 @@ public class TicketsController : CrudController<Ticket, TicketDto>
 {
     private readonly AppDbContext _db;
 
-    public TicketsController(ICrudService<Ticket, TicketDto> crudService, AppDbContext db) : base(crudService) 
-    { 
+    public TicketsController(ITicketService crudService, AppDbContext db) : base(crudService)
+    {
         _db = db;
     }
 
@@ -33,25 +33,25 @@ public class TicketsController : CrudController<Ticket, TicketDto>
             .FirstOrDefaultAsync(t => t.QrCode == request.QrCode, cancellationToken);
 
         if (ticket == null)
-            return NotFound(new { Success = false, Message = "Vé không tồn tại hoặc QR không hợp lệ" });
+            return NotFound(new { Success = false, Message = "VÃƒÆ’Ã‚Â© khÃƒÆ’Ã‚Â´ng tÃƒÂ¡Ã‚Â»Ã¢â‚¬Å“n tÃƒÂ¡Ã‚ÂºÃ‚Â¡i hoÃƒÂ¡Ã‚ÂºÃ‚Â·c QR khÃƒÆ’Ã‚Â´ng hÃƒÂ¡Ã‚Â»Ã‚Â£p lÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡" });
 
         if (ticket.Status == "CheckedIn")
-            return BadRequest(new { Success = false, Message = "Vé này đã được sử dụng (Checked-in) trước đó." });
+            return BadRequest(new { Success = false, Message = "VÃƒÆ’Ã‚Â© nÃƒÆ’Ã‚Â y Ãƒâ€žÃ¢â‚¬ËœÃƒÆ’Ã‚Â£ Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã‚Â£c sÃƒÂ¡Ã‚Â»Ã‚Â­ dÃƒÂ¡Ã‚Â»Ã‚Â¥ng (Checked-in) trÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºc Ãƒâ€žÃ¢â‚¬ËœÃƒÆ’Ã‚Â³." });
 
         if (ticket.Status == "Cancelled")
-            return BadRequest(new { Success = false, Message = "Vé này đã bị hủy." });
+            return BadRequest(new { Success = false, Message = "VÃƒÆ’Ã‚Â© nÃƒÆ’Ã‚Â y Ãƒâ€žÃ¢â‚¬ËœÃƒÆ’Ã‚Â£ bÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¹ hÃƒÂ¡Ã‚Â»Ã‚Â§y." });
 
         if (ticket.Booking.Status != "Paid")
-            return BadRequest(new { Success = false, Message = "Đơn vé chưa được thanh toán thành công." });
+            return BadRequest(new { Success = false, Message = "Ãƒâ€žÃ‚ÂÃƒâ€ Ã‚Â¡n vÃƒÆ’Ã‚Â© chÃƒâ€ Ã‚Â°a Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã‚Â£c thanh toÃƒÆ’Ã‚Â¡n thÃƒÆ’Ã‚Â nh cÃƒÆ’Ã‚Â´ng." });
 
         // Optionally check Showtime
         // if (ticket.Booking.Showtime.StartTime > DateTime.UtcNow.AddMinutes(30))
-        //     return BadRequest(new { Success = false, Message = "Chưa đến giờ check-in (chỉ hỗ trợ check-in trước 30 phút)." });
+        //     return BadRequest(new { Success = false, Message = "ChÃƒâ€ Ã‚Â°a Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚ÂºÃ‚Â¿n giÃƒÂ¡Ã‚Â»Ã‚Â check-in (chÃƒÂ¡Ã‚Â»Ã¢â‚¬Â° hÃƒÂ¡Ã‚Â»Ã¢â‚¬â€ trÃƒÂ¡Ã‚Â»Ã‚Â£ check-in trÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºc 30 phÃƒÆ’Ã‚Âºt)." });
 
         ticket.Status = "CheckedIn";
         await _db.SaveChangesAsync(cancellationToken);
 
-        return Ok(new { Success = true, Message = "Check-in thành công!", TicketId = ticket.Id });
+        return Ok(new { Success = true, Message = "Check-in thÃƒÆ’Ã‚Â nh cÃƒÆ’Ã‚Â´ng!", TicketId = ticket.Id });
     }
 }
 
@@ -59,3 +59,4 @@ public class CheckInRequest
 {
     public string QrCode { get; set; } = string.Empty;
 }
+

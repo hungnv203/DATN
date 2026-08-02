@@ -144,7 +144,7 @@ public class MovieDiscoveryService : IMovieDiscoveryService
                 Language = movie.Language,
                 Rating = movie.Rating,
                 PosterUrl = movie.PosterUrl,
-                Status = movie.Status
+                Status = movie.Status,
             })
             .ToListAsync(cancellationToken);
         var moviesById = movies.ToDictionary(movie => movie.Id);
@@ -155,3 +155,4 @@ public class MovieDiscoveryService : IMovieDiscoveryService
             .ToList();
     }
 }
+

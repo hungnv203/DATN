@@ -19,11 +19,11 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
     private readonly ILoyaltyService _loyaltyService;
 
     public PaymentsController(
-        ICrudService<Payment, PaymentDto> crudService, 
-        IVnPayService vnPayService, 
+        IPaymentService crudService,
+        IVnPayService vnPayService,
         AppDbContext db,
-        ILoyaltyService loyaltyService) : base(crudService) 
-    { 
+        ILoyaltyService loyaltyService) : base(crudService)
+    {
         _vnPayService = vnPayService;
         _db = db;
         _loyaltyService = loyaltyService;
@@ -194,3 +194,4 @@ public class CreatePaymentRequest
 {
     public Guid BookingId { get; set; }
 }
+

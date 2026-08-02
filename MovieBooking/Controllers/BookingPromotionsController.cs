@@ -8,5 +8,6 @@ namespace MovieBooking.Controllers;
 [Route("api/booking-promotions")]
 public class BookingPromotionsController : CrudController<BookingPromotion, BookingPromotionDto>
 {
-    public BookingPromotionsController(ICrudService<BookingPromotion, BookingPromotionDto> crudService) : base(crudService) { }
+    public BookingPromotionsController(IBookingPromotionService crudService) : base(crudService) { }
 }
+

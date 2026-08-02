@@ -12,7 +12,7 @@ public class MoviesController : CrudController<Movie, MovieDto>
     private readonly IMovieDiscoveryService _movieDiscoveryService;
 
     public MoviesController(
-        ICrudService<Movie, MovieDto> crudService,
+        IMovieService crudService,
         IMovieDiscoveryService movieDiscoveryService) : base(crudService)
     {
         _movieDiscoveryService = movieDiscoveryService;
@@ -41,3 +41,4 @@ public class MoviesController : CrudController<Movie, MovieDto>
         return await base.GetById(id, cancellationToken);
     }
 }
+

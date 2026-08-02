@@ -9,7 +9,7 @@ namespace MovieBooking.Controllers;
 [Route("api/genres")]
 public class GenresController : CrudController<Genre, GenreDto>
 {
-    public GenresController(ICrudService<Genre, GenreDto> crudService) : base(crudService) { }
+    public GenresController(IGenreService crudService) : base(crudService) { }
 
     [AllowAnonymous]
     [HttpGet]
@@ -25,3 +25,4 @@ public class GenresController : CrudController<Genre, GenreDto>
         return await base.GetById(id, cancellationToken);
     }
 }
+

@@ -13,7 +13,7 @@ public class SeatsController : CrudController<Seat, SeatDto>
     private readonly ISeatLayoutService _seatLayoutService;
 
     public SeatsController(
-        ICrudService<Seat, SeatDto> crudService,
+        ISeatService crudService,
         ISeatLayoutService seatLayoutService) : base(crudService)
     {
         _seatLayoutService = seatLayoutService;
@@ -58,3 +58,4 @@ public class SeatsController : CrudController<Seat, SeatDto>
         }
     }
 }
+

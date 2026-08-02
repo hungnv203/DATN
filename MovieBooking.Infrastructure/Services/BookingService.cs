@@ -145,12 +145,12 @@ public class BookingService : IBookingService
         var showtime = await _db.Showtimes.Include(s => s.Room).FirstOrDefaultAsync(s => s.Id == dto.ShowtimeId, cancellationToken);
         if (showtime == null)
         {
-            throw new InvalidOperationException("KhÃƒÂ´ng tÃƒÂ¬m thÃ¡ÂºÂ¥y suÃ¡ÂºÂ¥t chiÃ¡ÂºÂ¿u.");
+            throw new InvalidOperationException("Không tìm thấy suất chiếu.");
         }
 
         if (dto.SeatIds == null || dto.SeatIds.Count == 0)
         {
-            throw new InvalidOperationException("Danh sÃƒÂ¡ch ghÃ¡ÂºÂ¿ khÃƒÂ´ng Ã„â€˜Ã†Â°Ã¡Â»Â£c Ã„â€˜Ã¡Â»Æ’ trÃ¡Â»â€˜ng.");
+            throw new InvalidOperationException("Danh sách ghế không được để trống.");
         }
 
         // If UserId is not provided or is empty, assign current user ID
@@ -163,7 +163,7 @@ public class BookingService : IBookingService
         var seats = await _db.Seats.Where(s => dto.SeatIds.Contains(s.Id) && s.RoomId == showtime.RoomId).ToListAsync(cancellationToken);
         if (seats.Count != dto.SeatIds.Count)
         {
-            throw new InvalidOperationException("MÃ¡Â»â„¢t hoÃ¡ÂºÂ·c nhiÃ¡Â»Âu ghÃ¡ÂºÂ¿ Ã„â€˜Ã†Â°Ã¡Â»Â£c chÃ¡Â»Ân khÃƒÂ´ng hÃ¡Â»Â£p lÃ¡Â»â€¡ hoÃ¡ÂºÂ·c khÃƒÂ´ng thuÃ¡Â»â„¢c phÃƒÂ²ng chiÃ¡ÂºÂ¿u nÃƒÂ y.");
+            throw new InvalidOperationException("Một hoặc nhiều ghế được chọn không hợp lệ hoặc không thuộc phòng chiếu này.");
         }
 
         // Check availability
@@ -186,11 +186,11 @@ public class BookingService : IBookingService
         {
             if (reservedSeatIds.Contains(seatId))
             {
-                throw new InvalidOperationException($"GhÃ¡ÂºÂ¿ vÃ¡Â»â€ºi ID {seatId} Ã„â€˜ÃƒÂ£ Ã„â€˜Ã†Â°Ã¡Â»Â£c Ã„â€˜Ã¡ÂºÂ·t.");
+                throw new InvalidOperationException($"Ghế với ID {seatId} đã được đặt.");
             }
             if (heldSeatIds.Contains(seatId))
             {
-                throw new InvalidOperationException($"GhÃ¡ÂºÂ¿ vÃ¡Â»â€ºi ID {seatId} Ã„â€˜ang Ã„â€˜Ã†Â°Ã¡Â»Â£c giÃ¡Â»Â¯ bÃ¡Â»Å¸i ngÃ†Â°Ã¡Â»Âi dÃƒÂ¹ng khÃƒÂ¡c.");
+                throw new InvalidOperationException($"Ghế với ID {seatId} đang được giữ bởi người dùng khác.");
             }
         }
 
@@ -314,14 +314,14 @@ public class BookingService : IBookingService
         var httpContext = _httpContextAccessor.HttpContext;
         if (httpContext == null)
         {
-            return new SeatHoldResultDto { Success = false, Message = "YÃƒÂªu cÃ¡ÂºÂ§u khÃƒÂ´ng hÃ¡Â»Â£p lÃ¡Â»â€¡." };
+            return new SeatHoldResultDto { Success = false, Message = "Yêu cầu không hợp lệ." };
         }
 
         var user = httpContext.User;
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier) ?? user.FindFirst("sub");
         if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
         {
-            return new SeatHoldResultDto { Success = false, Message = "Vui lÃƒÂ²ng Ã„â€˜Ã„Æ’ng nhÃ¡ÂºÂ­p Ã„â€˜Ã¡Â»Æ’ giÃ¡Â»Â¯ ghÃ¡ÂºÂ¿." };
+            return new SeatHoldResultDto { Success = false, Message = "Vui lòng đăng nhập để giữ ghế." };
         }
 
         await using var transaction = await _db.Database.BeginTransactionAsync(
@@ -332,12 +332,12 @@ public class BookingService : IBookingService
         var showtimeExists = await _db.Showtimes.AnyAsync(s => s.Id == request.ShowtimeId, cancellationToken);
         if (!showtimeExists)
         {
-            return new SeatHoldResultDto { Success = false, Message = "KhÃƒÂ´ng tÃƒÂ¬m thÃ¡ÂºÂ¥y suÃ¡ÂºÂ¥t chiÃ¡ÂºÂ¿u." };
+            return new SeatHoldResultDto { Success = false, Message = "Không tìm thấy suất chiếu." };
         }
 
         if (request.SeatIds == null || request.SeatIds.Count == 0)
         {
-            return new SeatHoldResultDto { Success = false, Message = "Danh sÃƒÂ¡ch ghÃ¡ÂºÂ¿ trÃ¡Â»â€˜ng." };
+            return new SeatHoldResultDto { Success = false, Message = "Danh sách ghế trống." };
         }
 
         // Check if seats are already reserved
@@ -361,11 +361,11 @@ public class BookingService : IBookingService
         {
             if (reservedSeatIds.Contains(seatId))
             {
-                return new SeatHoldResultDto { Success = false, Message = $"GhÃ¡ÂºÂ¿ Ã„â€˜ÃƒÂ£ Ã„â€˜Ã†Â°Ã¡Â»Â£c Ã„â€˜Ã¡ÂºÂ·t." };
+                return new SeatHoldResultDto { Success = false, Message = $"Ghế đã được đặt." };
             }
             if (heldSeatIds.Contains(seatId))
             {
-                return new SeatHoldResultDto { Success = false, Message = $"GhÃ¡ÂºÂ¿ Ã„â€˜ang Ã„â€˜Ã†Â°Ã¡Â»Â£c giÃ¡Â»Â¯ bÃ¡Â»Å¸i ngÃ†Â°Ã¡Â»Âi khÃƒÂ¡c." };
+                return new SeatHoldResultDto { Success = false, Message = $"Ghế đang được giữ bởi người khác." };
             }
         }
 
@@ -395,7 +395,7 @@ public class BookingService : IBookingService
         return new SeatHoldResultDto
         {
             Success = true,
-            Message = "GiÃ¡Â»Â¯ ghÃ¡ÂºÂ¿ thÃƒÂ nh cÃƒÂ´ng.",
+            Message = "Giữ ghế thành công.",
             ExpiredAt = expiry
         };
     }
@@ -416,122 +416,40 @@ public class BookingService : IBookingService
                     .ThenInclude(s => s.Movie)
             .Include(t => t.Booking)
                 .ThenInclude(b => b.Showtime)
-       …22834 tokens truncated…ending(r => r.CreatedAt)
-            .Take(200)
+                    .ThenInclude(s => s.Room)
+                        .ThenInclude(r => r.Cinema)
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.BookingConcessions)
+                    .ThenInclude(bc => bc.Concession)
+            .Include(t => t.Seat)
+            .Where(t => t.Booking.UserId == userId)
+            .OrderByDescending(t => t.Booking.Showtime.StartTime)
             .ToListAsync(cancellationToken);
 
-        return reviews.Select(r => _mapper.Map<MovieReviewDto>(r)).ToList();
-    }
-
-    public async Task<IReadOnlyList<MovieReviewDto>> GetVisibleReviewsAsync(
-        Guid movieId,
-        CancellationToken cancellationToken = default)
-    {
-        var reviews = await _db.MovieReviews
-            .AsNoTracking()
-            .Include(r => r.User)
-            .Where(r => r.MovieId == movieId && r.Status == "Visible")
-            .OrderByDescending(r => r.CreatedAt)
-            .Take(100)
-            .ToListAsync(cancellationToken);
-
-        return reviews.Select(r => _mapper.Map<MovieReviewDto>(r)).ToList();
-    }
-
-    public async Task<MovieRatingSummaryDto> GetRatingSummaryAsync(
-        Guid movieId,
-        CancellationToken cancellationToken = default)
-    {
-        var ratings = await _db.MovieReviews
-            .AsNoTracking()
-            .Where(r => r.MovieId == movieId && r.Status == "Visible")
-            .Select(r => r.Rating)
-            .ToListAsync(cancellationToken);
-
-        return new MovieRatingSummaryDto
+        var result = new List<MyTicketDto>();
+        foreach (var t in tickets)
         {
-            MovieId = movieId,
-            AverageRating = ratings.Count == 0 ? 0 : Math.Round(ratings.Average(), 1),
-            TotalReviews = ratings.Count,
-            RatingBreakdown = Enumerable.Range(1, 5).ToDictionary(
-                rating => rating,
-                rating => ratings.Count(value => value == rating))
-        };
-    }
-
-    public async Task<MovieReviewDto> CreateReviewAsync(
-        Guid movieId,
-        CreateMovieReviewDto dto,
-        CancellationToken cancellationToken = default)
-    {
-        if (dto.Rating < 1 || dto.Rating > 5)
-        {
-            throw new InvalidOperationException("Rating pháº£i náº±m trong khoáº£ng 1 Ä‘áº¿n 5.");
+            result.Add(new MyTicketDto
+            {
+                Id = t.Id,
+                BookingId = t.BookingId,
+                MovieTitle = t.Booking.Showtime.Movie.Title,
+                CinemaName = t.Booking.Showtime.Room.Cinema.Name,
+                RoomName = t.Booking.Showtime.Room.Name,
+                StartTime = t.Booking.Showtime.StartTime,
+                SeatLabel = $"{t.Seat.RowLabel}{t.Seat.SeatNumber}",
+                QrCode = t.QrCode,
+                Status = t.Status,
+                PaymentStatus = t.Booking.Status,
+                Price = t.Price,
+                Concessions = t.Booking.BookingConcessions.Select(bc => new TicketConcessionDto
+                {
+                    Name = bc.Concession.Name,
+                    Quantity = bc.Quantity
+                }).ToList()
+            });
         }
 
-        var userId = GetCurrentUserId();
-        if (userId == Guid.Empty)
-        {
-            throw new InvalidOperationException("Vui lÃ²ng Ä‘Äƒng nháº­p Ä‘á»ƒ Ä‘Ã¡nh giÃ¡ phim.");
-        }
-
-        var alreadyReviewed = await _db.MovieReviews.AnyAsync(
-            r => r.MovieId == movieId && r.UserId == userId,
-            cancellationToken);
-        if (alreadyReviewed)
-        {
-            throw new InvalidOperationException("Báº¡n Ä‘Ã£ Ä‘Ã¡nh giÃ¡ phim nÃ y.");
-        }
-
-        var eligibleBooking = await _db.Bookings
-            .Include(b => b.Showtime)
-            .Where(b => b.UserId == userId
-                && b.Status == "Paid"
-                && b.Showtime.MovieId == movieId
-                && b.Showtime.StartTime <= DateTime.UtcNow)
-            .OrderByDescending(b => b.Showtime.StartTime)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (eligibleBooking == null)
-        {
-            throw new InvalidOperationException("Báº¡n chá»‰ cÃ³ thá»ƒ Ä‘Ã¡nh giÃ¡ phim Ä‘Ã£ mua vÃ© vÃ  Ä‘Ã£ xem.");
-        }
-
-        var review = new MovieReview
-        {
-            MovieId = movieId,
-            UserId = userId,
-            BookingId = eligibleBooking.Id,
-            Rating = dto.Rating,
-            Comment = dto.Comment.Trim(),
-            Status = "Visible"
-        };
-
-        _db.MovieReviews.Add(review);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        await _db.Entry(review).Reference(r => r.User).LoadAsync(cancellationToken);
-        return _mapper.Map<MovieReviewDto>(review);
-    }
-
-    public async Task<bool> HideReviewAsync(Guid reviewId, CancellationToken cancellationToken = default)
-    {
-        var review = await _db.MovieReviews.FirstOrDefaultAsync(r => r.Id == reviewId, cancellationToken);
-        if (review == null)
-        {
-            return false;
-        }
-
-        review.Status = "Hidden";
-        review.MarkUpdated(DateTimeOffset.UtcNow);
-        await _db.SaveChangesAsync(cancellationToken);
-        return true;
-    }
-
-    private Guid GetCurrentUserId()
-    {
-        var user = _httpContextAccessor.HttpContext?.User;
-        var claim = user?.FindFirst(ClaimTypes.NameIdentifier) ?? user?.FindFirst("sub");
-        return claim != null && Guid.TryParse(claim.Value, out var userId) ? userId : Guid.Empty;
+        return result;
     }
 }
-

@@ -3,16 +3,17 @@ using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Persistence;
+using PaymentEntity = MovieBooking.Domain.Entities.Payment;
 
 namespace MovieBooking.Infrastructure.Services;
 
 internal sealed class PaymentService : IPaymentService
 {
-    private readonly EntityCrudOperations<Payment, PaymentDto> _operations;
+    private readonly EntityCrudOperations<PaymentEntity, PaymentDto> _operations;
 
     public PaymentService(AppDbContext dbContext, IMapper mapper)
     {
-        _operations = new EntityCrudOperations<Payment, PaymentDto>(dbContext, mapper);
+        _operations = new EntityCrudOperations<PaymentEntity, PaymentDto>(dbContext, mapper);
     }
 
     public Task<IReadOnlyList<PaymentDto>> GetAllAsync(CancellationToken cancellationToken = default) =>
@@ -30,4 +31,3 @@ internal sealed class PaymentService : IPaymentService
     public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
         _operations.DeleteAsync(id, cancellationToken);
 }
-

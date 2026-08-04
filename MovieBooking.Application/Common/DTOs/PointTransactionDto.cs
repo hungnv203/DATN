@@ -7,6 +7,7 @@ public class PointTransactionDto
     public Guid? BookingId { get; set; }
     public int Points { get; set; }
     public string Type { get; set; } = string.Empty;
+    public string? EffectType { get; set; }
     public int BalanceAfter { get; set; }
     public string Description { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }

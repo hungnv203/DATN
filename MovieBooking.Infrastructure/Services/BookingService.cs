@@ -9,7 +9,9 @@ using AutoMapper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using MovieBooking.Application.Common.DTOs;
+using MovieBooking.Application.Common.Exceptions;
 using MovieBooking.Application.Common.Interfaces;
+using MovieBooking.Domain.Constants;
 using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Persistence;
 
@@ -23,13 +25,15 @@ public class BookingService : IBookingService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IPricingService _pricingService;
     private readonly ILoyaltyService _loyaltyService;
+    private readonly TimeProvider _timeProvider;
 
     public BookingService(
         AppDbContext db,
         IMapper mapper,
         IHttpContextAccessor httpContextAccessor,
         IPricingService pricingService,
-        ILoyaltyService loyaltyService)
+        ILoyaltyService loyaltyService,
+        TimeProvider timeProvider)
     {
         _operations = new EntityCrudOperations<Booking, BookingDto>(db, mapper);
         _db = db;
@@ -37,6 +41,7 @@ public class BookingService : IBookingService
         _httpContextAccessor = httpContextAccessor;
         _pricingService = pricingService;
         _loyaltyService = loyaltyService;
+        _timeProvider = timeProvider;
     }
 
     public async Task<IReadOnlyList<BookingDto>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -148,16 +153,49 @@ public class BookingService : IBookingService
             throw new InvalidOperationException("Không tìm thấy suất chiếu.");
         }
 
-        if (dto.SeatIds == null || dto.SeatIds.Count == 0)
+        dto.SeatIds ??= new List<Guid>();
+        if (dto.SeatIds.Count == 0 || !dto.SeatHoldGroupId.HasValue)
         {
-            throw new InvalidOperationException("Danh sách ghế không được để trống.");
+            throw new InvalidOperationException("The seat list cannot be empty.");
         }
 
         // If UserId is not provided or is empty, assign current user ID
-        var finalUserId = isPointOfSale && dto.UserId != Guid.Empty
-            ? dto.UserId
-            : currentUserId;
-        var bookingStatus = isPointOfSale ? "Paid" : "Pending";
+        var finalUserId = currentUserId;
+        var bookingStatus = BookingStatuses.Pending;
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var activeHoldRows = new List<SeatHold>();
+        if (dto.SeatHoldGroupId.HasValue)
+        {
+            var activeOwnedHolds = await _db.SeatHolds
+                .Where(hold => hold.ShowtimeId == dto.ShowtimeId
+                               && hold.UserId == finalUserId
+                               && hold.Status == SeatHoldStatuses.Active
+                               && hold.ExpiredAt > now
+                               && hold.BookingId == null)
+                .OrderBy(hold => hold.SeatId)
+                .ToListAsync(cancellationToken);
+
+            activeHoldRows = activeOwnedHolds
+                .Where(hold => hold.HoldGroupId == dto.SeatHoldGroupId.Value)
+                .ToList();
+
+            if (activeHoldRows.Count == 0)
+            {
+                throw new SeatHoldConflictException(
+                    "An active seat hold owned by the current user is required.");
+            }
+
+            var groupSeatIds = activeHoldRows.Select(hold => hold.SeatId).OrderBy(id => id).ToArray();
+            if (dto.SeatIds.Count > 0
+                && !dto.SeatIds.OrderBy(id => id).SequenceEqual(groupSeatIds))
+            {
+                throw new SeatHoldConflictException(
+                    "The requested seats do not match the active seat hold.");
+            }
+
+            dto.SeatIds = groupSeatIds.ToList();
+        }
 
         // Fetch all seats
         var seats = await _db.Seats.Where(s => dto.SeatIds.Contains(s.Id) && s.RoomId == showtime.RoomId).ToListAsync(cancellationToken);
@@ -167,28 +205,36 @@ public class BookingService : IBookingService
         }
 
         // Check availability
-        var reservedSeatIds = await _db.Tickets
+        var purchasedSeatIds = await _db.Tickets
             .Include(t => t.Booking)
-            .Where(t => t.Booking.ShowtimeId == dto.ShowtimeId 
-                        && t.Booking.Status != "Cancelled" 
-                        && t.Booking.Status != "Expired")
+            .Where(t => t.Booking.ShowtimeId == dto.ShowtimeId
+                        && t.Booking.Status == "Paid")
+            .Select(t => t.SeatId)
+            .ToListAsync(cancellationToken);
+
+        var pendingSeatIds = await _db.Tickets
+            .Include(t => t.Booking)
+            .Where(t => t.Booking.ShowtimeId == dto.ShowtimeId
+                        && t.Booking.Status == "Pending"
+                        && t.Booking.ExpiredAt > now)
             .Select(t => t.SeatId)
             .ToListAsync(cancellationToken);
 
         var heldSeatIds = await _db.SeatHolds
             .Where(sh => sh.ShowtimeId == dto.ShowtimeId 
-                         && sh.ExpiredAt > DateTime.UtcNow 
-                         && sh.UserId != finalUserId)
+                         && sh.Status == SeatHoldStatuses.Active
+                         && sh.ExpiredAt > now
+                         && (!dto.SeatHoldGroupId.HasValue || sh.HoldGroupId != dto.SeatHoldGroupId.Value))
             .Select(sh => sh.SeatId)
             .ToListAsync(cancellationToken);
 
         foreach (var seatId in dto.SeatIds)
         {
-            if (reservedSeatIds.Contains(seatId))
+            if (purchasedSeatIds.Contains(seatId))
             {
                 throw new InvalidOperationException($"Ghế với ID {seatId} đã được đặt.");
             }
-            if (heldSeatIds.Contains(seatId))
+            if (pendingSeatIds.Contains(seatId) || heldSeatIds.Contains(seatId))
             {
                 throw new InvalidOperationException($"Ghế với ID {seatId} đang được giữ bởi người dùng khác.");
             }
@@ -222,7 +268,7 @@ public class BookingService : IBookingService
             {
                 SeatId = seat.Id,
                 Price = price,
-                Status = "Reserved",
+                Status = TicketStatuses.Held,
                 QrCode = Guid.NewGuid().ToString("N") // Temporary QR Code content
             });
         }
@@ -271,13 +317,15 @@ public class BookingService : IBookingService
         {
             UserId = finalUserId,
             ShowtimeId = dto.ShowtimeId,
+            SeatHoldGroupId = dto.SeatHoldGroupId,
+            Channel = isPointOfSale ? BookingChannels.PointOfSale : BookingChannels.CustomerOnline,
             Status = bookingStatus,
             Subtotal = quote.Subtotal,
             DiscountAmount = quote.DiscountAmount,
             PointDiscountAmount = quote.PointDiscountAmount,
             UsedPoints = quote.UsedPoints,
             TotalPrice = quote.TotalPrice,
-            ExpiredAt = isPointOfSale ? null : DateTime.UtcNow.AddMinutes(5),
+            ExpiredAt = activeHoldRows[0].ExpiredAt,
             Tickets = tickets,
             BookingConcessions = bookingConcessions,
             BookingPromotions = bookingPromotions
@@ -285,17 +333,14 @@ public class BookingService : IBookingService
 
         await _db.Bookings.AddAsync(booking, cancellationToken);
 
-        // Delete any existing holds of this user for these seats
-        var holdsToRemove = await _db.SeatHolds
-            .Where(sh => sh.ShowtimeId == dto.ShowtimeId && sh.UserId == finalUserId && dto.SeatIds.Contains(sh.SeatId))
-            .ToListAsync(cancellationToken);
-        if (holdsToRemove.Any())
+        foreach (var hold in activeHoldRows)
         {
-            _db.SeatHolds.RemoveRange(holdsToRemove);
+            hold.BookingId = booking.Id;
+            hold.MarkUpdated(new DateTimeOffset(now, TimeSpan.Zero));
         }
 
         await _db.SaveChangesAsync(cancellationToken);
-        if (quote.UsedPoints > 0)
+        if (!isPointOfSale && quote.UsedPoints > 0)
         {
             await _loyaltyService.RedeemForBookingAsync(booking.Id, quote.UsedPoints, cancellationToken);
             await _db.SaveChangesAsync(cancellationToken);
@@ -307,97 +352,6 @@ public class BookingService : IBookingService
         resultDto.SeatIds = dto.SeatIds; // Preserve seat IDs in result
         resultDto.PromotionCode = dto.PromotionCode;
         return resultDto;
-    }
-
-    public async Task<SeatHoldResultDto> HoldSeatsAsync(HoldSeatsRequestDto request, CancellationToken cancellationToken = default)
-    {
-        var httpContext = _httpContextAccessor.HttpContext;
-        if (httpContext == null)
-        {
-            return new SeatHoldResultDto { Success = false, Message = "Yêu cầu không hợp lệ." };
-        }
-
-        var user = httpContext.User;
-        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier) ?? user.FindFirst("sub");
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-        {
-            return new SeatHoldResultDto { Success = false, Message = "Vui lòng đăng nhập để giữ ghế." };
-        }
-
-        await using var transaction = await _db.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable,
-            cancellationToken);
-
-        // Validate showtime
-        var showtimeExists = await _db.Showtimes.AnyAsync(s => s.Id == request.ShowtimeId, cancellationToken);
-        if (!showtimeExists)
-        {
-            return new SeatHoldResultDto { Success = false, Message = "Không tìm thấy suất chiếu." };
-        }
-
-        if (request.SeatIds == null || request.SeatIds.Count == 0)
-        {
-            return new SeatHoldResultDto { Success = false, Message = "Danh sách ghế trống." };
-        }
-
-        // Check if seats are already reserved
-        var reservedSeatIds = await _db.Tickets
-            .Include(t => t.Booking)
-            .Where(t => t.Booking.ShowtimeId == request.ShowtimeId 
-                        && t.Booking.Status != "Cancelled" 
-                        && t.Booking.Status != "Expired")
-            .Select(t => t.SeatId)
-            .ToListAsync(cancellationToken);
-
-        // Check if seats are already held by OTHER users
-        var heldSeatIds = await _db.SeatHolds
-            .Where(sh => sh.ShowtimeId == request.ShowtimeId 
-                         && sh.ExpiredAt > DateTime.UtcNow 
-                         && sh.UserId != userId)
-            .Select(sh => sh.SeatId)
-            .ToListAsync(cancellationToken);
-
-        foreach (var seatId in request.SeatIds)
-        {
-            if (reservedSeatIds.Contains(seatId))
-            {
-                return new SeatHoldResultDto { Success = false, Message = $"Ghế đã được đặt." };
-            }
-            if (heldSeatIds.Contains(seatId))
-            {
-                return new SeatHoldResultDto { Success = false, Message = $"Ghế đang được giữ bởi người khác." };
-            }
-        }
-
-        // Release user's previous holds for this showtime
-        var existingHolds = await _db.SeatHolds
-            .Where(sh => sh.ShowtimeId == request.ShowtimeId && sh.UserId == userId)
-            .ToListAsync(cancellationToken);
-        if (existingHolds.Any())
-        {
-            _db.SeatHolds.RemoveRange(existingHolds);
-        }
-
-        // Create new holds
-        var expiry = DateTime.UtcNow.AddMinutes(5);
-        var newHolds = request.SeatIds.Select(seatId => new SeatHold
-        {
-            ShowtimeId = request.ShowtimeId,
-            SeatId = seatId,
-            UserId = userId,
-            ExpiredAt = expiry
-        }).ToList();
-
-        await _db.SeatHolds.AddRangeAsync(newHolds, cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        return new SeatHoldResultDto
-        {
-            Success = true,
-            Message = "Giữ ghế thành công.",
-            ExpiredAt = expiry
-        };
     }
 
     public async Task<List<MyTicketDto>> GetMyTicketsAsync(CancellationToken cancellationToken = default)

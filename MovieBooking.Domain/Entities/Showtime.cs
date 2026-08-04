@@ -14,4 +14,5 @@ public class Showtime : BaseEntity
     public string Status { get; set; } = string.Empty;
     public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
     public ICollection<SeatHold> SeatHolds { get; set; } = new List<SeatHold>();
+    public ShowtimeSeatVersion? SeatVersion { get; set; }
 }

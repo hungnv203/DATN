@@ -1,17 +1,14 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using MovieBooking.Infrastructure.Persistence;
+using MovieBooking.Application.Common.Interfaces;
 
 namespace MovieBooking.Infrastructure.Services;
 
-public class ExpiredSeatHoldsCleanupService : BackgroundService
+public sealed class ExpiredSeatHoldsCleanupService : BackgroundService
 {
+    private static readonly TimeSpan CleanupInterval = TimeSpan.FromSeconds(30);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ExpiredSeatHoldsCleanupService> _logger;
 
@@ -25,38 +22,38 @@ public class ExpiredSeatHoldsCleanupService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Expired Seat Holds Cleanup Service is starting.");
+        _logger.LogInformation("Expired seat-hold cleanup service is starting.");
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                using (var scope = _scopeFactory.CreateScope())
+                using var scope = _scopeFactory.CreateScope();
+                var seatHoldService = scope.ServiceProvider.GetRequiredService<ISeatHoldService>();
+                var publisher = scope.ServiceProvider.GetRequiredService<ISeatRealtimePublisher>();
+                var batches = await seatHoldService.ExpireElapsedAsync(stoppingToken);
+                foreach (var batch in batches)
                 {
-                    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-                    var now = DateTime.UtcNow;
-                    var expiredHolds = await dbContext.SeatHolds
-                        .Where(sh => sh.ExpiredAt <= now)
-                        .ToListAsync(stoppingToken);
-
-                    if (expiredHolds.Any())
-                    {
-                        _logger.LogInformation("Found {Count} expired seat holds. Deleting...", expiredHolds.Count);
-                        dbContext.SeatHolds.RemoveRange(expiredHolds);
-                        await dbContext.SaveChangesAsync(stoppingToken);
-                    }
+                    await publisher.PublishAsync(batch, stoppingToken);
+                }
+                var expiredCount = batches.Sum(batch => batch.Changes.Count);
+                if (expiredCount > 0)
+                {
+                    _logger.LogInformation(
+                        "Seat-hold cleanup transitioned {Count} rows to Expired.",
+                        expiredCount);
                 }
             }
-            catch (Exception ex)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                _logger.LogError(ex, "Error occurred during expired seat holds cleanup.");
+                break;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Seat-hold cleanup failed.");
             }
 
-            // Run every 30 seconds
-            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            await Task.Delay(CleanupInterval, stoppingToken);
         }
-
-        _logger.LogInformation("Expired Seat Holds Cleanup Service is stopping.");
     }
 }

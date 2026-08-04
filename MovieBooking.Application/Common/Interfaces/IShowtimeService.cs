@@ -10,4 +10,5 @@ namespace MovieBooking.Application.Common.Interfaces;
 public interface IShowtimeService : ICrudService<Showtime, ShowtimeDto>
 {
     Task<IReadOnlyList<ShowtimeSeatDto>> GetSeatsForShowtimeAsync(Guid showtimeId, CancellationToken cancellationToken = default);
+    Task<SeatStateSnapshotDto> GetSeatStateAsync(Guid showtimeId, Guid userId, CancellationToken cancellationToken = default);
 }

@@ -18,6 +18,20 @@ public class TicketsController : CrudController<Ticket, TicketDto>
         _db = db;
     }
 
+    public override Task<ActionResult<TicketDto>> Create(
+        TicketDto dto,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<ActionResult<TicketDto>>(StatusCode(StatusCodes.Status405MethodNotAllowed));
+
+    public override Task<IActionResult> Update(
+        Guid id,
+        TicketDto dto,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IActionResult>(StatusCode(StatusCodes.Status405MethodNotAllowed));
+
+    public override Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult<IActionResult>(StatusCode(StatusCodes.Status405MethodNotAllowed));
+
     [HttpPost("checkin")]
     [HasPermission("CheckIn")]
     public async Task<IActionResult> CheckIn(

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MovieBooking.Infrastructure.Persistence;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MovieBooking.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260802134448_AddSeatHoldLifecycle")]
+    partial class AddSeatHoldLifecycle
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -27,13 +30,6 @@ namespace MovieBooking.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<string>("Channel")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasDefaultValue("CustomerOnline");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -452,10 +448,6 @@ namespace MovieBooking.Infrastructure.Migrations
                     b.HasIndex("BookingId")
                         .IsUnique();
 
-                    b.HasIndex("Method", "TransactionCode")
-                        .IsUnique()
-                        .HasFilter("\"TransactionCode\" <> ''");
-
                     b.ToTable("Payments");
                 });
 
@@ -487,82 +479,6 @@ namespace MovieBooking.Infrastructure.Migrations
                     b.HasIndex("PaymentId");
 
                     b.ToTable("PaymentLogs");
-                });
-
-            modelBuilder.Entity("MovieBooking.Domain.Entities.PaymentOperation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ActorUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BookingId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ClientIdempotencyKey")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Method")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<string>("OperationType")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<Guid?>("PaymentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ProviderEventKey")
-                        .HasMaxLength(64)
-                        .HasColumnType("character(64)")
-                        .IsFixedLength();
-
-                    b.Property<string>("ReasonCode")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("RequestFingerprint")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Result")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BookingId");
-
-                    b.HasIndex("ClientIdempotencyKey")
-                        .IsUnique()
-                        .HasFilter("\"ClientIdempotencyKey\" IS NOT NULL");
-
-                    b.HasIndex("PaymentId");
-
-                    b.HasIndex("ProviderEventKey")
-                        .IsUnique()
-                        .HasFilter("\"ProviderEventKey\" IS NOT NULL");
-
-                    b.ToTable("PaymentOperations", t =>
-                        {
-                            t.HasCheckConstraint("CK_PaymentOperations_IdempotencyDomain", "(\"ClientIdempotencyKey\" IS NOT NULL AND \"ProviderEventKey\" IS NULL) OR (\"ClientIdempotencyKey\" IS NULL AND \"ProviderEventKey\" IS NOT NULL)");
-                        });
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Permission", b =>
@@ -609,10 +525,6 @@ namespace MovieBooking.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("EffectType")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
                     b.Property<int>("Points")
                         .HasColumnType("integer");
 
@@ -628,11 +540,9 @@ namespace MovieBooking.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("BookingId");
 
-                    b.HasIndex("BookingId", "EffectType")
-                        .IsUnique()
-                        .HasFilter("\"BookingId\" IS NOT NULL AND \"EffectType\" IS NOT NULL");
+                    b.HasIndex("UserId");
 
                     b.ToTable("PointTransactions");
                 });
@@ -895,21 +805,6 @@ namespace MovieBooking.Infrastructure.Migrations
                     b.ToTable("Showtimes");
                 });
 
-            modelBuilder.Entity("MovieBooking.Domain.Entities.ShowtimeSeatVersion", b =>
-                {
-                    b.Property<Guid>("ShowtimeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<long>("Version")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasDefaultValue(0L);
-
-                    b.HasKey("ShowtimeId");
-
-                    b.ToTable("ShowtimeSeatVersions");
-                });
-
             modelBuilder.Entity("MovieBooking.Domain.Entities.Ticket", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1168,24 +1063,6 @@ namespace MovieBooking.Infrastructure.Migrations
                     b.Navigation("Payment");
                 });
 
-            modelBuilder.Entity("MovieBooking.Domain.Entities.PaymentOperation", b =>
-                {
-                    b.HasOne("MovieBooking.Domain.Entities.Booking", "Booking")
-                        .WithMany("PaymentOperations")
-                        .HasForeignKey("BookingId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("MovieBooking.Domain.Entities.Payment", "Payment")
-                        .WithMany("Operations")
-                        .HasForeignKey("PaymentId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Booking");
-
-                    b.Navigation("Payment");
-                });
-
             modelBuilder.Entity("MovieBooking.Domain.Entities.PointTransaction", b =>
                 {
                     b.HasOne("MovieBooking.Domain.Entities.Booking", "Booking")
@@ -1291,17 +1168,6 @@ namespace MovieBooking.Infrastructure.Migrations
                     b.Navigation("Room");
                 });
 
-            modelBuilder.Entity("MovieBooking.Domain.Entities.ShowtimeSeatVersion", b =>
-                {
-                    b.HasOne("MovieBooking.Domain.Entities.Showtime", "Showtime")
-                        .WithOne("SeatVersion")
-                        .HasForeignKey("MovieBooking.Domain.Entities.ShowtimeSeatVersion", "ShowtimeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Showtime");
-                });
-
             modelBuilder.Entity("MovieBooking.Domain.Entities.Ticket", b =>
                 {
                     b.HasOne("MovieBooking.Domain.Entities.Booking", "Booking")
@@ -1350,8 +1216,6 @@ namespace MovieBooking.Infrastructure.Migrations
 
                     b.Navigation("Payment");
 
-                    b.Navigation("PaymentOperations");
-
                     b.Navigation("PointTransactions");
 
                     b.Navigation("Tickets");
@@ -1384,8 +1248,6 @@ namespace MovieBooking.Infrastructure.Migrations
             modelBuilder.Entity("MovieBooking.Domain.Entities.Payment", b =>
                 {
                     b.Navigation("Logs");
-
-                    b.Navigation("Operations");
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.Permission", b =>
@@ -1424,8 +1286,6 @@ namespace MovieBooking.Infrastructure.Migrations
                     b.Navigation("Bookings");
 
                     b.Navigation("SeatHolds");
-
-                    b.Navigation("SeatVersion");
                 });
 
             modelBuilder.Entity("MovieBooking.Domain.Entities.User", b =>

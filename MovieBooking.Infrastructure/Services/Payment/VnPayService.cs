@@ -62,11 +62,23 @@ public class VnPayService : IVnPayService
         var amountValue = vnpay.GetResponseData("vnp_Amount");
         var vnp_SecureHash = collections.FirstOrDefault(p => p.Key == "vnp_SecureHash").Value;
         var vnp_ResponseCode = vnpay.GetResponseData("vnp_ResponseCode");
+        var transactionStatus = vnpay.GetResponseData("vnp_TransactionStatus");
+        var terminalCode = vnpay.GetResponseData("vnp_TmnCode");
+        var currencyCode = vnpay.GetResponseData("vnp_CurrCode");
         var vnp_OrderInfo = vnpay.GetResponseData("vnp_OrderInfo");
 
         var hashSecret = GetRequiredSetting("VnPay:HashSecret");
         bool checkSignature = vnpay.ValidateSignature(vnp_SecureHash, hashSecret);
         if (!checkSignature)
+        {
+            return new VnPayResponseModel
+            {
+                Success = false
+            };
+        }
+
+        var configuredTerminalCode = GetRequiredSetting("VnPay:TmnCode");
+        if (!string.Equals(terminalCode, configuredTerminalCode, StringComparison.Ordinal))
         {
             return new VnPayResponseModel
             {
@@ -89,6 +101,9 @@ public class VnPayService : IVnPayService
             TransactionId = transactionId.ToString(),
             Token = vnp_SecureHash,
             VnPayResponseCode = vnp_ResponseCode,
+            TransactionStatus = transactionStatus,
+            TerminalCode = terminalCode,
+            CurrencyCode = currencyCode,
             Amount = amount / 100m
         };
     }

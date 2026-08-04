@@ -23,11 +23,13 @@ public class AppDbContext : DbContext
     public DbSet<Genre> Genres => Set<Genre>();
     public DbSet<MovieGenre> MovieGenres => Set<MovieGenre>();
     public DbSet<Showtime> Showtimes => Set<Showtime>();
+    public DbSet<ShowtimeSeatVersion> ShowtimeSeatVersions => Set<ShowtimeSeatVersion>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<SeatHold> SeatHolds => Set<SeatHold>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentLog> PaymentLogs => Set<PaymentLog>();
+    public DbSet<PaymentOperation> PaymentOperations => Set<PaymentOperation>();
     public DbSet<Promotion> Promotions => Set<Promotion>();
     public DbSet<BookingPromotion> BookingPromotions => Set<BookingPromotion>();
     public DbSet<LoyaltyPoint> LoyaltyPoints => Set<LoyaltyPoint>();
@@ -73,6 +75,20 @@ public class AppDbContext : DbContext
             .WithOne(x => x.Payment)
             .HasForeignKey<Payment>(x => x.BookingId);
 
+        modelBuilder.Entity<Payment>()
+            .HasIndex(x => x.BookingId)
+            .IsUnique();
+
+        modelBuilder.Entity<Payment>()
+            .HasIndex(x => new { x.Method, x.TransactionCode })
+            .IsUnique()
+            .HasFilter("\"TransactionCode\" <> ''");
+
+        modelBuilder.Entity<Booking>()
+            .Property(x => x.Channel)
+            .HasMaxLength(32)
+            .HasDefaultValue(MovieBooking.Domain.Constants.BookingChannels.CustomerOnline);
+
         modelBuilder.Entity<Booking>()
             .HasOne(x => x.User)
             .WithMany(x => x.Bookings)
@@ -85,6 +101,37 @@ public class AppDbContext : DbContext
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<SeatHold>()
+            .Property(x => x.Status)
+            .HasMaxLength(32);
+
+        modelBuilder.Entity<SeatHold>()
+            .HasIndex(x => new { x.ShowtimeId, x.SeatId })
+            .IsUnique()
+            .HasFilter("\"Status\" = 'Active'");
+
+        modelBuilder.Entity<SeatHold>()
+            .HasIndex(x => new { x.HoldGroupId, x.UserId });
+
+        modelBuilder.Entity<SeatHold>()
+            .HasIndex(x => new { x.Status, x.ExpiredAt });
+
+        modelBuilder.Entity<Booking>()
+            .HasIndex(x => x.SeatHoldGroupId)
+            .IsUnique()
+            .HasFilter("\"SeatHoldGroupId\" IS NOT NULL");
+
+        modelBuilder.Entity<ShowtimeSeatVersion>()
+            .HasKey(x => x.ShowtimeId);
+        modelBuilder.Entity<ShowtimeSeatVersion>()
+            .Property(x => x.Version)
+            .HasDefaultValue(0L);
+        modelBuilder.Entity<ShowtimeSeatVersion>()
+            .HasOne(x => x.Showtime)
+            .WithOne(x => x.SeatVersion)
+            .HasForeignKey<ShowtimeSeatVersion>(x => x.ShowtimeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<LoyaltyPoint>()
             .HasOne(x => x.User)
             .WithOne(x => x.LoyaltyPoint)
@@ -94,6 +141,64 @@ public class AppDbContext : DbContext
             .HasOne(x => x.Booking)
             .WithMany(x => x.PointTransactions)
             .HasForeignKey(x => x.BookingId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<PointTransaction>()
+            .Property(x => x.EffectType)
+            .HasMaxLength(32);
+
+        modelBuilder.Entity<PointTransaction>()
+            .HasIndex(x => new { x.BookingId, x.EffectType })
+            .IsUnique()
+            .HasFilter("\"BookingId\" IS NOT NULL AND \"EffectType\" IS NOT NULL");
+
+        modelBuilder.Entity<PaymentOperation>()
+            .Property(x => x.ProviderEventKey)
+            .HasMaxLength(64)
+            .IsFixedLength();
+
+        modelBuilder.Entity<PaymentOperation>()
+            .Property(x => x.OperationType)
+            .HasMaxLength(32);
+
+        modelBuilder.Entity<PaymentOperation>()
+            .Property(x => x.Method)
+            .HasMaxLength(16);
+
+        modelBuilder.Entity<PaymentOperation>()
+            .Property(x => x.Result)
+            .HasMaxLength(32);
+
+        modelBuilder.Entity<PaymentOperation>()
+            .Property(x => x.ReasonCode)
+            .HasMaxLength(64);
+
+        modelBuilder.Entity<PaymentOperation>()
+            .HasIndex(x => x.ClientIdempotencyKey)
+            .IsUnique()
+            .HasFilter("\"ClientIdempotencyKey\" IS NOT NULL");
+
+        modelBuilder.Entity<PaymentOperation>()
+            .HasIndex(x => x.ProviderEventKey)
+            .IsUnique()
+            .HasFilter("\"ProviderEventKey\" IS NOT NULL");
+
+        modelBuilder.Entity<PaymentOperation>()
+            .ToTable(table => table.HasCheckConstraint(
+                "CK_PaymentOperations_IdempotencyDomain",
+                "(\"ClientIdempotencyKey\" IS NOT NULL AND \"ProviderEventKey\" IS NULL) OR " +
+                "(\"ClientIdempotencyKey\" IS NULL AND \"ProviderEventKey\" IS NOT NULL)"));
+
+        modelBuilder.Entity<PaymentOperation>()
+            .HasOne(x => x.Booking)
+            .WithMany(x => x.PaymentOperations)
+            .HasForeignKey(x => x.BookingId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<PaymentOperation>()
+            .HasOne(x => x.Payment)
+            .WithMany(x => x.Operations)
+            .HasForeignKey(x => x.PaymentId)
             .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<BookingConcession>()

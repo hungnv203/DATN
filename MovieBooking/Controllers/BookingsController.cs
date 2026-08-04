@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MovieBooking.Application.Common.DTOs;
+using MovieBooking.Application.Common.Exceptions;
 using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Security;
@@ -16,11 +17,22 @@ public class BookingsController : CrudController<Booking, BookingDto>
 {
     private readonly IBookingService _bookingService;
     private readonly IPricingService _pricingService;
+    private readonly ISeatHoldService _seatHoldService;
+    private readonly ISeatRealtimePublisher _seatRealtimePublisher;
+    private readonly IPaymentWorkflowService _paymentWorkflowService;
 
-    public BookingsController(IBookingService bookingService, IPricingService pricingService) : base(bookingService)
+    public BookingsController(
+        IBookingService bookingService,
+        IPricingService pricingService,
+        ISeatHoldService seatHoldService,
+        ISeatRealtimePublisher seatRealtimePublisher,
+        IPaymentWorkflowService paymentWorkflowService) : base(bookingService)
     {
         _bookingService = bookingService;
         _pricingService = pricingService;
+        _seatHoldService = seatHoldService;
+        _seatRealtimePublisher = seatRealtimePublisher;
+        _paymentWorkflowService = paymentWorkflowService;
     }
 
     [HttpPost]
@@ -31,6 +43,10 @@ public class BookingsController : CrudController<Booking, BookingDto>
         {
             var created = await _bookingService.CreateAsync(dto, cancellationToken);
             return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        }
+        catch (SeatHoldConflictException ex)
+        {
+            return Conflict(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -48,12 +64,17 @@ public class BookingsController : CrudController<Booking, BookingDto>
     [HttpPost("pos")]
     [MovieBooking.Infrastructure.Security.HasPermission("Create")]
     public async Task<ActionResult<BookingDto>> CreatePointOfSale(
-        [FromBody] BookingDto dto,
+        [FromBody] CreatePosBookingRequestDto request,
         CancellationToken cancellationToken)
     {
         try
         {
-            var created = await _bookingService.CreatePointOfSaleAsync(dto, cancellationToken);
+            var created = await _bookingService.CreatePointOfSaleAsync(new BookingDto
+            {
+                ShowtimeId = request.ShowtimeId,
+                SeatIds = request.SeatIds.ToList(),
+                SeatHoldGroupId = request.SeatHoldGroupId
+            }, cancellationToken);
             return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
         }
         catch (InvalidOperationException ex)
@@ -69,15 +90,101 @@ public class BookingsController : CrudController<Booking, BookingDto>
         }
     }
 
+    [HttpPost("{bookingId:guid}/pos-payment-confirmations")]
+    [HasPermission("Create")]
+    public async Task<ActionResult<PaymentTransitionResultDto>> ConfirmPointOfSalePayment(
+        Guid bookingId,
+        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
+        [FromBody] PosPaymentConfirmationRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(idempotencyKey, out var key)
+            || request.Method != MovieBooking.Domain.Constants.PaymentMethods.Cash)
+        {
+            return BadRequest(new { message = "A UUID Idempotency-Key and Cash method are required." });
+        }
+
+        var result = await _paymentWorkflowService.ConfirmPosCashAsync(
+            GetCurrentUserId(),
+            bookingId,
+            key,
+            cancellationToken);
+        if (!result.Success)
+        {
+            return ToWorkflowFailure(result);
+        }
+
+        if (result.ChangeBatch != null)
+        {
+            await _seatRealtimePublisher.PublishAsync(result.ChangeBatch, cancellationToken);
+        }
+
+        return result.IsReplay ? Ok(result) : StatusCode(StatusCodes.Status201Created, result);
+    }
+
+    [HttpPost("{bookingId:guid}/pos-cancellations")]
+    [HasPermission("Create")]
+    public async Task<ActionResult<PaymentTransitionResultDto>> CancelPointOfSale(
+        Guid bookingId,
+        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
+        [FromBody] PosCancellationRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(idempotencyKey, out var key))
+        {
+            return BadRequest(new { message = "A UUID Idempotency-Key is required." });
+        }
+
+        var result = await _paymentWorkflowService.CancelPosAsync(
+            GetCurrentUserId(),
+            bookingId,
+            key,
+            request.ReasonCode,
+            cancellationToken);
+        if (!result.Success)
+        {
+            return ToWorkflowFailure(result);
+        }
+
+        if (result.ChangeBatch != null)
+        {
+            await _seatRealtimePublisher.PublishAsync(result.ChangeBatch, cancellationToken);
+        }
+
+        return Ok(result);
+    }
+
+    public override Task<IActionResult> Update(
+        Guid id,
+        BookingDto dto,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IActionResult>(StatusCode(StatusCodes.Status405MethodNotAllowed));
+
+    public override Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult<IActionResult>(StatusCode(StatusCodes.Status405MethodNotAllowed));
+
     [HttpPost("hold-seats")]
+    [Authorize]
     public async Task<ActionResult<SeatHoldResultDto>> HoldSeats([FromBody] HoldSeatsRequestDto request, CancellationToken cancellationToken)
     {
         try
         {
-            var result = await _bookingService.HoldSeatsAsync(request, cancellationToken);
+            var result = await _seatHoldService.CreateOrReplaceForShowtimeAsync(
+                GetCurrentUserId(),
+                request,
+                cancellationToken);
+            if (result.ChangeBatch != null)
+            {
+                await _seatRealtimePublisher.PublishAsync(result.ChangeBatch, cancellationToken);
+            }
             if (!result.Success)
             {
-                return BadRequest(result);
+                return result.ErrorCode switch
+                {
+                    "SHOWTIME_NOT_FOUND" => NotFound(result),
+                    "SEAT_NOT_AVAILABLE" => Conflict(result),
+                    _ => BadRequest(result)
+                };
             }
             return Ok(result);
         }
@@ -117,5 +224,13 @@ public class BookingsController : CrudController<Booking, BookingDto>
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
         return userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId) ? userId : Guid.Empty;
+    }
+
+    private ActionResult<PaymentTransitionResultDto> ToWorkflowFailure(
+        PaymentTransitionResultDto result)
+    {
+        return result.ErrorCode.EndsWith("NOT_FOUND", StringComparison.Ordinal)
+            ? NotFound(result)
+            : Conflict(result);
     }
 }

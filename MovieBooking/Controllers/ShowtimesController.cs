@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MovieBooking.Application.Common.DTOs;
@@ -78,6 +79,28 @@ public class ShowtimesController : CrudController<Showtime, ShowtimeDto>
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Unable to load showtime seats.");
+        }
+    }
+
+    [Authorize]
+    [HttpGet("{showtimeId:guid}/seat-state")]
+    public async Task<ActionResult<SeatStateSnapshotDto>> GetSeatState(
+        Guid showtimeId,
+        CancellationToken cancellationToken)
+    {
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+        if (claim == null || !Guid.TryParse(claim.Value, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            return Ok(await _showtimeService.GetSeatStateAsync(showtimeId, userId, cancellationToken));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
         }
     }
 }

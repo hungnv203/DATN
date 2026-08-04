@@ -19,5 +19,8 @@ public class VnPayResponseModel
     public string TransactionId { get; set; } = string.Empty;
     public string Token { get; set; } = string.Empty;
     public string VnPayResponseCode { get; set; } = string.Empty;
+    public string TransactionStatus { get; set; } = string.Empty;
+    public string TerminalCode { get; set; } = string.Empty;
+    public string CurrencyCode { get; set; } = string.Empty;
     public decimal Amount { get; set; }
 }

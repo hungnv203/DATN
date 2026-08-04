@@ -11,4 +11,5 @@ public class Payment : BaseEntity
     public string Status { get; set; } = string.Empty;
     public string TransactionCode { get; set; } = string.Empty;
     public ICollection<PaymentLog> Logs { get; set; } = new List<PaymentLog>();
+    public ICollection<PaymentOperation> Operations { get; set; } = new List<PaymentOperation>();
 }

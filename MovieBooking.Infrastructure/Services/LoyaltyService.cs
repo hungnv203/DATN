@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Domain.Entities;
+using MovieBooking.Domain.Constants;
 using MovieBooking.Infrastructure.Persistence;
 
 namespace MovieBooking.Infrastructure.Services;
@@ -47,7 +48,7 @@ public class LoyaltyService : ILoyaltyService
         }
 
         var alreadyEarned = await _db.PointTransactions.AnyAsync(
-            t => t.BookingId == bookingId && t.Type == "Earn",
+            t => t.BookingId == bookingId && t.EffectType == LoyaltyEffectTypes.Earn,
             cancellationToken);
         if (alreadyEarned)
         {
@@ -65,6 +66,7 @@ public class LoyaltyService : ILoyaltyService
             bookingId,
             earnedPoints,
             "Earn",
+            LoyaltyEffectTypes.Earn,
             "Earned points from paid booking.",
             cancellationToken);
     }
@@ -91,8 +93,9 @@ public class LoyaltyService : ILoyaltyService
             await AddTransactionAsync(
                 booking.UserId,
                 bookingId,
-                -refundedPoints,
-                "Refund",
+            -refundedPoints,
+            "Refund",
+            null,
                 "Reverted earned points after refund.",
                 cancellationToken);
         }
@@ -114,7 +117,7 @@ public class LoyaltyService : ILoyaltyService
         }
 
         var alreadyRedeemed = await _db.PointTransactions.AnyAsync(
-            t => t.BookingId == bookingId && t.Type == "Redeem",
+            t => t.BookingId == bookingId && t.EffectType == LoyaltyEffectTypes.Redeem,
             cancellationToken);
         if (alreadyRedeemed)
         {
@@ -126,6 +129,7 @@ public class LoyaltyService : ILoyaltyService
             bookingId,
             -usedPoints,
             "Redeem",
+            LoyaltyEffectTypes.Redeem,
             "Redeemed points for booking discount.",
             cancellationToken);
     }
@@ -140,9 +144,11 @@ public class LoyaltyService : ILoyaltyService
 
         var redeemedTransaction = await _db.PointTransactions
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.BookingId == bookingId && t.Type == "Redeem", cancellationToken);
+            .FirstOrDefaultAsync(
+                t => t.BookingId == bookingId && t.EffectType == LoyaltyEffectTypes.Redeem,
+                cancellationToken);
         var alreadyReturnedRedeem = await _db.PointTransactions.AnyAsync(
-            t => t.BookingId == bookingId && (t.Type == "RedeemRefund" || t.Type == "RedeemExpired"),
+            t => t.BookingId == bookingId && t.EffectType == LoyaltyEffectTypes.RedeemReturn,
             cancellationToken);
         if (redeemedTransaction == null || alreadyReturnedRedeem)
         {
@@ -154,6 +160,7 @@ public class LoyaltyService : ILoyaltyService
             bookingId,
             Math.Abs(redeemedTransaction.Points),
             booking.Status == "Expired" ? "RedeemExpired" : "RedeemRefund",
+            LoyaltyEffectTypes.RedeemReturn,
             booking.Status == "Expired"
                 ? "Returned redeemed points after booking expiration."
                 : "Returned redeemed points after refund.",
@@ -165,6 +172,7 @@ public class LoyaltyService : ILoyaltyService
         Guid bookingId,
         int points,
         string type,
+        string? effectType,
         string description,
         CancellationToken cancellationToken)
     {
@@ -183,6 +191,7 @@ public class LoyaltyService : ILoyaltyService
             BookingId = bookingId,
             Points = points,
             Type = type,
+            EffectType = effectType,
             BalanceAfter = wallet.Points,
             Description = description
         });

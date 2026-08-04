@@ -5,6 +5,8 @@ public class BookingDto
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public Guid ShowtimeId { get; set; }
+    public Guid? SeatHoldGroupId { get; set; }
+    public string Channel { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public decimal Subtotal { get; set; }
     public decimal DiscountAmount { get; set; }

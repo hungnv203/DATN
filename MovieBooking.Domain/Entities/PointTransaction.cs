@@ -10,6 +10,7 @@ public class PointTransaction : BaseEntity
     public Booking? Booking { get; set; }
     public int Points { get; set; }
     public string Type { get; set; } = string.Empty;
+    public string? EffectType { get; set; }
     public int BalanceAfter { get; set; }
     public string Description { get; set; } = string.Empty;
 }

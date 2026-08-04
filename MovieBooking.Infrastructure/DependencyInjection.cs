@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
 
         services.AddHttpContextAccessor();
+        services.AddSingleton(TimeProvider.System);
 
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(connectionString)
@@ -65,6 +66,7 @@ public static class DependencyInjection
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IVnPayService, VnPayService>();
+        services.AddScoped<IPaymentWorkflowService, PaymentWorkflowService>();
         services.AddHostedService<ExpiredSeatHoldsCleanupService>();
         services.AddHostedService<ExpiredBookingsCleanupService>();
         services.AddHostedService<MovieStatusUpdateService>();

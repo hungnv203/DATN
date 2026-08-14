@@ -222,7 +222,7 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
         }
 
         var baseUrl = _configuration["VnPay:AppReturnUrl"]
-            ?? "https://datn-iuj8.onrender.com/payment-result";
+            ?? "http://localhost:3000/payment-result";
         return bookingId.HasValue
             ? Redirect($"{baseUrl}?bookingId={bookingId.Value}")
             : Redirect(baseUrl);

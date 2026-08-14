@@ -22,7 +22,6 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found.");
 
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
-        services.Configure<AssistantOptions>(configuration.GetSection(AssistantOptions.SectionName));
 
         services.AddHttpContextAccessor();
         services.AddSingleton(TimeProvider.System);
@@ -58,15 +57,6 @@ public static class DependencyInjection
         services.AddScoped<ILoyaltyService, LoyaltyService>();
         services.AddScoped<IMovieReviewService, MovieReviewService>();
         services.AddScoped<IMovieDiscoveryService, MovieDiscoveryService>();
-        services.AddScoped<IAssistantService, AssistantService>();
-        services.AddScoped<IAssistantMovieCatalogue, AssistantMovieCatalogue>();
-        services.AddHttpClient<IAiAssistantClient, OpenAiAssistantClient>((provider, client) =>
-        {
-            var options = configuration.GetSection(AssistantOptions.SectionName).Get<AssistantOptions>()
-                ?? new AssistantOptions();
-            client.BaseAddress = new Uri(options.BaseUrl.EndsWith('/') ? options.BaseUrl : $"{options.BaseUrl}/");
-            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(options.TimeoutSeconds, 5, 60));
-        });
         services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
         services.AddScoped<ITicketService, TicketService>();
         services.AddScoped<IShowtimeService, ShowtimeService>();

@@ -10,6 +10,8 @@ using MovieBooking.Infrastructure.Persistence;
 using MovieBooking.Hubs;
 using MovieBooking.Realtime;
 using System.Text;
+using System.Security.Claims;
+using System.Threading.RateLimiting;
 
 System.AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
@@ -53,6 +55,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("Assistant", httpContext =>
+    {
+        var userKey = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "anonymous";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            userKey,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+});
 
 builder.Services.AddCors(options =>
 {
@@ -128,6 +149,7 @@ app.UseHttpsRedirection();
 app.UseCors("ApplicationCors");
 
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();

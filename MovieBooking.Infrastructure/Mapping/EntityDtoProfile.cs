@@ -35,10 +35,6 @@ public class EntityDtoProfile : Profile
         CreateMap<Movie, MovieDto>();
         CreateMap<MovieDto, Movie>().IgnoreBaseEntityFromDto();
 
-        CreateMap<MovieReview, MovieReviewDto>()
-            .ForMember(dest => dest.UserName, opt => opt.MapFrom(src => src.User.FullName));
-        CreateMap<MovieReviewDto, MovieReview>().IgnoreBaseEntityFromDto();
-
         CreateMap<Genre, GenreDto>();
         CreateMap<GenreDto, Genre>().IgnoreBaseEntityFromDto();
 
@@ -67,18 +63,6 @@ public class EntityDtoProfile : Profile
 
         CreateMap<PaymentLog, PaymentLogDto>();
         CreateMap<PaymentLogDto, PaymentLog>().IgnoreBaseEntityFromDto();
-
-        CreateMap<Promotion, PromotionDto>();
-        CreateMap<PromotionDto, Promotion>().IgnoreBaseEntityFromDto();
-
-        CreateMap<BookingPromotion, BookingPromotionDto>();
-        CreateMap<BookingPromotionDto, BookingPromotion>().IgnoreBaseEntityFromDto();
-
-        CreateMap<LoyaltyPoint, LoyaltyPointDto>();
-        CreateMap<LoyaltyPointDto, LoyaltyPoint>().IgnoreBaseEntityFromDto();
-
-        CreateMap<PointTransaction, PointTransactionDto>();
-        CreateMap<PointTransactionDto, PointTransaction>().IgnoreBaseEntityFromDto();
 
         CreateMap<Notification, NotificationDto>();
         CreateMap<NotificationDto, Notification>().IgnoreBaseEntityFromDto();

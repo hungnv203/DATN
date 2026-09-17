@@ -14,9 +14,6 @@ public class User : BaseEntity
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
     public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
     public ICollection<SeatHold> SeatHolds { get; set; } = new List<SeatHold>();
-    public LoyaltyPoint? LoyaltyPoint { get; set; }
-    public ICollection<PointTransaction> PointTransactions { get; set; } = new List<PointTransaction>();
-    public ICollection<MovieReview> MovieReviews { get; set; } = new List<MovieReview>();
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 
     public void SetPassword(string passwordHash, DateTimeOffset when)

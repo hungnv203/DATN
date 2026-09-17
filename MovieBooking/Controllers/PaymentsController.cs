@@ -4,12 +4,10 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Domain.Constants;
 using MovieBooking.Domain.Entities;
-using MovieBooking.Infrastructure.Persistence;
 
 namespace MovieBooking.Controllers;
 
@@ -19,23 +17,23 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
     private readonly IVnPayService _vnPayService;
     private readonly IPaymentWorkflowService _paymentWorkflowService;
     private readonly ISeatRealtimePublisher _seatRealtimePublisher;
-    private readonly AppDbContext _db;
     private readonly IConfiguration _configuration;
+    private readonly IPaymentService _paymentService;
 
     public PaymentsController(
         IPaymentService crudService,
         IVnPayService vnPayService,
         IPaymentWorkflowService paymentWorkflowService,
         ISeatRealtimePublisher seatRealtimePublisher,
-        AppDbContext db,
         IConfiguration configuration) : base(crudService)
     {
+        _paymentService = crudService;
         _vnPayService = vnPayService;
         _paymentWorkflowService = paymentWorkflowService;
         _seatRealtimePublisher = seatRealtimePublisher;
-        _db = db;
         _configuration = configuration;
     }
+
 
     [Authorize(Roles = "Admin")]
     public override Task<ActionResult<IReadOnlyList<PaymentDto>>> GetAll(
@@ -46,30 +44,34 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
         Guid id,
         CancellationToken cancellationToken)
     {
-        var payment = await _db.Payments
-            .AsNoTracking()
-            .Include(item => item.Booking)
-            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
-        if (payment == null)
+        Guid? currentUserId = null;
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+        if (claim != null && Guid.TryParse(claim.Value, out var userId))
+        {
+            currentUserId = userId;
+        }
+
+        var isAdminOrManager = User.IsInRole("Admin") || User.IsInRole("Manager") || User.IsInRole("Cashier");
+
+        var (dto, found, authorized) = await _paymentService.GetPaymentDetailForUserAsync(
+            id,
+            currentUserId,
+            isAdminOrManager,
+            cancellationToken);
+
+        if (!found)
         {
             return NotFound();
         }
 
-        if (!CanAccessBooking(payment.Booking))
+        if (!authorized)
         {
             return Forbid();
         }
 
-        return Ok(new PaymentDto
-        {
-            Id = payment.Id,
-            BookingId = payment.BookingId,
-            Amount = payment.Amount,
-            Method = payment.Method,
-            Status = payment.Status,
-            TransactionCode = string.Empty
-        });
+        return Ok(dto);
     }
+
 
     public override Task<ActionResult<PaymentDto>> Create(
         PaymentDto dto,
@@ -90,49 +92,32 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
         [FromBody] CreatePaymentRequest request,
         CancellationToken cancellationToken)
     {
-        var booking = await _db.Bookings.FirstOrDefaultAsync(
-            item => item.Id == request.BookingId,
-            cancellationToken);
-        if (booking == null)
-        {
-            return NotFound(new { message = "Booking was not found." });
-        }
-
-        if (!CanAccessBooking(booking))
-        {
-            return Forbid();
-        }
-
-        if (booking.Channel != BookingChannels.CustomerOnline
-            || booking.Status != BookingStatuses.Pending)
-        {
-            return Conflict(new { message = "Booking is not eligible for online payment." });
-        }
-
-        var payment = await _db.Payments.SingleOrDefaultAsync(
-            item => item.BookingId == booking.Id,
-            cancellationToken);
-        if (payment != null && payment.Status != PaymentStatuses.Pending)
-        {
-            return Conflict(new { message = "Payment is already finalized." });
-        }
-
-        if (payment == null)
-        {
-            payment = new Payment
-            {
-                BookingId = booking.Id,
-                Amount = booking.TotalPrice,
-                Method = PaymentMethods.VnPay,
-                Status = PaymentStatuses.Pending,
-                TransactionCode = string.Empty
-            };
-            _db.Payments.Add(payment);
-            await _db.SaveChangesAsync(cancellationToken);
-        }
-
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-        return Ok(new { Url = _vnPayService.CreatePaymentUrl(ipAddress, payment, booking) });
+        
+        Guid? currentUserId = null;
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+        if (claim != null && Guid.TryParse(claim.Value, out var userId))
+        {
+            currentUserId = userId;
+        }
+
+        var isAdminOrManager = User.IsInRole("Admin") || User.IsInRole("Manager") || User.IsInRole("Cashier");
+
+        var result = await _paymentService.CreatePaymentUrlAsync(
+            request.BookingId,
+            ipAddress,
+            currentUserId,
+            isAdminOrManager,
+            cancellationToken);
+
+        if (!result.Success)
+        {
+            if (result.Message == "Booking was not found.") return NotFound(new { message = result.Message });
+            if (result.Message == "Forbidden") return Forbid();
+            return Conflict(new { message = result.Message });
+        }
+
+        return Ok(new { Url = result.Url });
     }
 
     [HttpGet("vnpay-ipn")]
@@ -151,18 +136,17 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
             return Ok(new { RspCode = "01", Message = "Payment was not found." });
         }
 
-        var payment = await _db.Payments
-            .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == paymentId, cancellationToken);
-        if (payment == null)
+        var (found, amount) = await _paymentService.GetPaymentVerificationInfoAsync(paymentId, cancellationToken);
+        if (!found)
         {
             return Ok(new { RspCode = "01", Message = "Payment was not found." });
         }
 
-        if (response.Amount != payment.Amount || response.CurrencyCode != "VND")
+        if (response.Amount != amount || response.CurrencyCode != "VND")
         {
             return Ok(new { RspCode = "04", Message = "Invalid payment amount." });
         }
+
 
         if (string.IsNullOrWhiteSpace(response.TransactionStatus)
             || string.IsNullOrWhiteSpace(response.VnPayResponseCode))
@@ -214,18 +198,105 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
         Guid? bookingId = null;
         if (response.Success && Guid.TryParse(response.OrderId, out var paymentId))
         {
-            bookingId = await _db.Payments
-                .AsNoTracking()
-                .Where(item => item.Id == paymentId)
-                .Select(item => (Guid?)item.BookingId)
-                .SingleOrDefaultAsync(cancellationToken);
+            bookingId = await _paymentService.GetBookingIdByPaymentIdAsync(paymentId, cancellationToken);
+
+            var succeeded = response.VnPayResponseCode == VnPayStatuses.Success
+                && response.TransactionStatus == VnPayStatuses.Success;
+            var confirmedFailure = VnPayStatuses.ConfirmedFailureResponseCodes.Contains(response.VnPayResponseCode)
+                && VnPayStatuses.ConfirmedFailureTransactionStatuses.Contains(response.TransactionStatus);
+
+            if (succeeded || confirmedFailure)
+            {
+                var command = new ProviderPaymentCommandDto
+                {
+                    PaymentId = paymentId,
+                    ProviderEventKey = BuildProviderEventKey(response, paymentId),
+                    ProviderTransactionCode = response.TransactionId,
+                    Succeeded = succeeded,
+                    ConfirmedFailure = confirmedFailure
+                };
+
+                var result = await _paymentWorkflowService.ProcessProviderNotificationAsync(
+                    command,
+                    cancellationToken);
+
+                if (result.ChangeBatch != null)
+                {
+                    await _seatRealtimePublisher.PublishAsync(result.ChangeBatch, cancellationToken);
+                }
+            }
         }
 
-        var baseUrl = _configuration["VnPay:AppReturnUrl"]
-            ?? "http://localhost:3000/payment-result";
-        return bookingId.HasValue
-            ? Redirect($"{baseUrl}?bookingId={bookingId.Value}")
-            : Redirect(baseUrl);
+        var isSuccess = response.Success && response.VnPayResponseCode == "00";
+        var statusTitle = isSuccess ? "Thanh toán thành công!" : "Thanh toán không thành công";
+        var statusDesc = isSuccess
+            ? "Giao dịch của bạn đã được ghi nhận thành công. Cửa sổ này sẽ tự động đóng."
+            : "Giao dịch đã bị hủy hoặc xảy ra lỗi trong quá trình thanh toán. Cửa sổ này sẽ tự động đóng.";
+        var icon = isSuccess ? "✅" : "⚠️";
+
+        var html = $@"<!DOCTYPE html>
+<html lang=""vi"">
+<head>
+    <meta charset=""utf-8"" />
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"" />
+    <title>Kết quả thanh toán</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #121212;
+            color: #ffffff;
+            text-align: center;
+        }}
+        .card {{
+            background: #1e1e1e;
+            padding: 32px 24px;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            max-width: 420px;
+            width: 90%;
+            border: 1px solid #333;
+        }}
+        .icon {{ font-size: 48px; margin-bottom: 16px; }}
+        h2 {{ margin: 0 0 12px; font-size: 22px; }}
+        p {{ margin: 0 0 24px; color: #a0a0a0; font-size: 15px; line-height: 1.5; }}
+        .btn {{
+            display: inline-block;
+            background-color: #e50914;
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+        }}
+    </style>
+</head>
+<body>
+    <div class=""card"">
+        <div class=""icon"">{icon}</div>
+        <h2>{statusTitle}</h2>
+        <p>{statusDesc}</p>
+        <button class=""btn"" onclick=""closeWindow()"">Đóng cửa sổ</button>
+    </div>
+    <script>
+        function closeWindow() {{
+            try {{
+                window.close();
+            }} catch (e) {{}}
+        }}
+        setTimeout(closeWindow, 2000);
+    </script>
+</body>
+</html>";
+
+        return Content(html, "text/html", Encoding.UTF8);
     }
 
     [HttpPost("{id:guid}/refund")]
@@ -233,19 +304,6 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
     public IActionResult RefundPayment(Guid id) => StatusCode(
         StatusCodes.Status501NotImplemented,
         new { message = "VNPAY refund integration is not configured." });
-
-    private bool CanAccessBooking(Booking booking)
-    {
-        if (User.IsInRole("Admin") || User.IsInRole("Manager") || User.IsInRole("Cashier"))
-        {
-            return true;
-        }
-
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
-        return claim != null
-            && Guid.TryParse(claim.Value, out var userId)
-            && booking.UserId == userId;
-    }
 
     private static string BuildProviderEventKey(VnPayResponseModel response, Guid paymentId)
     {

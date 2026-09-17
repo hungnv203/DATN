@@ -37,7 +37,6 @@ public class ExpiredBookingsCleanupService : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var loyaltyService = scope.ServiceProvider.GetRequiredService<ILoyaltyService>();
                 var publisher = scope.ServiceProvider.GetRequiredService<ISeatRealtimePublisher>();
 
                 var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -78,8 +77,6 @@ public class ExpiredBookingsCleanupService : BackgroundService
                         {
                             booking.Payment.Status = "Expired";
                         }
-
-                        await loyaltyService.ReturnRedeemedPointsAsync(booking.Id, stoppingToken);
                     }
 
                     foreach (var hold in linkedHolds)

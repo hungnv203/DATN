@@ -95,5 +95,43 @@ public class TicketService : ITicketService
 
     public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
         _operations.DeleteAsync(id, cancellationToken);
+
+    public async Task<(bool Success, string Message, Guid? TicketId)> CheckInAsync(string qrCode, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(qrCode))
+        {
+            return (false, "QR Code is required", null);
+        }
+
+        var ticket = await _db.Tickets
+            .Include(t => t.Booking)
+            .ThenInclude(b => b.Showtime)
+            .FirstOrDefaultAsync(t => t.QrCode == qrCode, cancellationToken);
+
+        if (ticket == null)
+        {
+            return (false, "Vé không tồn tại hoặc mã QR không hợp lệ.", null);
+        }
+
+        if (ticket.Status == "CheckedIn")
+        {
+            return (false, "Vé này đã được sử dụng để check-in trước đó.", null);
+        }
+
+        if (ticket.Status == "Cancelled")
+        {
+            return (false, "Vé này đã bị hủy.", null);
+        }
+
+        if (ticket.Booking.Status != "Paid")
+        {
+            return (false, "Đơn vé chưa được thanh toán thành công.", null);
+        }
+
+        ticket.Status = "CheckedIn";
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return (true, "Check-in thành công!", ticket.Id);
+    }
 }
 

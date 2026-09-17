@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using MovieBooking.Domain.Entities;
 
 namespace MovieBooking.Infrastructure.Persistence;
@@ -19,7 +19,6 @@ public class AppDbContext : DbContext
     public DbSet<Room> Rooms => Set<Room>();
     public DbSet<Seat> Seats => Set<Seat>();
     public DbSet<Movie> Movies => Set<Movie>();
-    public DbSet<MovieReview> MovieReviews => Set<MovieReview>();
     public DbSet<Genre> Genres => Set<Genre>();
     public DbSet<MovieGenre> MovieGenres => Set<MovieGenre>();
     public DbSet<Showtime> Showtimes => Set<Showtime>();
@@ -30,10 +29,6 @@ public class AppDbContext : DbContext
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentLog> PaymentLogs => Set<PaymentLog>();
     public DbSet<PaymentOperation> PaymentOperations => Set<PaymentOperation>();
-    public DbSet<Promotion> Promotions => Set<Promotion>();
-    public DbSet<BookingPromotion> BookingPromotions => Set<BookingPromotion>();
-    public DbSet<LoyaltyPoint> LoyaltyPoints => Set<LoyaltyPoint>();
-    public DbSet<PointTransaction> PointTransactions => Set<PointTransaction>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Concession> Concessions => Set<Concession>();
     public DbSet<BookingConcession> BookingConcessions => Set<BookingConcession>();
@@ -52,18 +47,6 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<MovieGenre>()
             .HasIndex(x => new { x.MovieId, x.GenreId })
-            .IsUnique();
-
-        modelBuilder.Entity<MovieReview>()
-            .HasIndex(x => new { x.MovieId, x.UserId })
-            .IsUnique();
-
-        modelBuilder.Entity<BookingPromotion>()
-            .HasIndex(x => new { x.BookingId, x.PromotionId })
-            .IsUnique();
-
-        modelBuilder.Entity<LoyaltyPoint>()
-            .HasIndex(x => x.UserId)
             .IsUnique();
 
         modelBuilder.Entity<User>()
@@ -132,26 +115,6 @@ public class AppDbContext : DbContext
             .HasForeignKey<ShowtimeSeatVersion>(x => x.ShowtimeId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<LoyaltyPoint>()
-            .HasOne(x => x.User)
-            .WithOne(x => x.LoyaltyPoint)
-            .HasForeignKey<LoyaltyPoint>(x => x.UserId);
-
-        modelBuilder.Entity<PointTransaction>()
-            .HasOne(x => x.Booking)
-            .WithMany(x => x.PointTransactions)
-            .HasForeignKey(x => x.BookingId)
-            .OnDelete(DeleteBehavior.SetNull);
-
-        modelBuilder.Entity<PointTransaction>()
-            .Property(x => x.EffectType)
-            .HasMaxLength(32);
-
-        modelBuilder.Entity<PointTransaction>()
-            .HasIndex(x => new { x.BookingId, x.EffectType })
-            .IsUnique()
-            .HasFilter("\"BookingId\" IS NOT NULL AND \"EffectType\" IS NOT NULL");
-
         modelBuilder.Entity<PaymentOperation>()
             .Property(x => x.ProviderEventKey)
             .HasMaxLength(64)
@@ -212,23 +175,5 @@ public class AppDbContext : DbContext
             .WithMany(x => x.BookingConcessions)
             .HasForeignKey(x => x.ConcessionId)
             .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<MovieReview>()
-            .HasOne(x => x.Movie)
-            .WithMany(x => x.Reviews)
-            .HasForeignKey(x => x.MovieId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<MovieReview>()
-            .HasOne(x => x.User)
-            .WithMany(x => x.MovieReviews)
-            .HasForeignKey(x => x.UserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<MovieReview>()
-            .HasOne(x => x.Booking)
-            .WithMany(x => x.MovieReviews)
-            .HasForeignKey(x => x.BookingId)
-            .OnDelete(DeleteBehavior.SetNull);
     }
 }

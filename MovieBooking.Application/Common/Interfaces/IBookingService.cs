@@ -10,4 +10,5 @@ public interface IBookingService : ICrudService<Booking, BookingDto>
 {
     Task<BookingDto> CreatePointOfSaleAsync(BookingDto dto, CancellationToken cancellationToken = default);
     Task<List<MyTicketDto>> GetMyTicketsAsync(CancellationToken cancellationToken = default);
+    Task<List<MyTicketDto>> GetMySuccessfulTicketsAsync(CancellationToken cancellationToken = default);
 }

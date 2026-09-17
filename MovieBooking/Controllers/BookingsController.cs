@@ -220,6 +220,13 @@ public class BookingsController : CrudController<Booking, BookingDto>
         return Ok(tickets);
     }
 
+    [HttpGet("my-tickets/success")]
+    public async Task<ActionResult<List<MyTicketDto>>> GetMySuccessfulTickets(CancellationToken cancellationToken)
+    {
+        var tickets = await _bookingService.GetMySuccessfulTicketsAsync(cancellationToken);
+        return Ok(tickets);
+    }
+
     private Guid GetCurrentUserId()
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");

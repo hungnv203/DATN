@@ -18,18 +18,15 @@ internal sealed class PaymentWorkflowService : IPaymentWorkflowService
 
     private readonly AppDbContext _db;
     private readonly IMapper _mapper;
-    private readonly ILoyaltyService _loyaltyService;
     private readonly TimeProvider _timeProvider;
 
     public PaymentWorkflowService(
         AppDbContext db,
         IMapper mapper,
-        ILoyaltyService loyaltyService,
         TimeProvider timeProvider)
     {
         _db = db;
         _mapper = mapper;
-        _loyaltyService = loyaltyService;
         _timeProvider = timeProvider;
     }
 
@@ -292,10 +289,6 @@ internal sealed class PaymentWorkflowService : IPaymentWorkflowService
             payment.Status = PaymentStatuses.Success;
             payment.TransactionCode = command.ProviderTransactionCode;
             ApplySuccess(booking, holds, now);
-            await _loyaltyService.EarnForBookingAsync(
-                booking.Id,
-                payment.Amount,
-                cancellationToken);
             var batch = await CreateBatchAsync(booking, holds, "Booked", now, cancellationToken);
             _db.PaymentOperations.Add(CreateProviderOperation(
                 booking,
@@ -345,7 +338,6 @@ internal sealed class PaymentWorkflowService : IPaymentWorkflowService
         var failedHolds = await LoadActiveBookingHoldsAsync(booking, now, cancellationToken);
         payment.Status = PaymentStatuses.Failed;
         ApplyCancellation(booking, failedHolds, BookingStatuses.Failed, now);
-        await _loyaltyService.ReturnRedeemedPointsAsync(booking.Id, cancellationToken);
         var failureBatch = failedHolds.Count == 0
             ? null
             : await CreateBatchAsync(booking, failedHolds, "Available", now, cancellationToken);

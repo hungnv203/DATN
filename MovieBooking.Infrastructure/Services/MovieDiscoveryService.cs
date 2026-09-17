@@ -46,21 +46,8 @@ public class MovieDiscoveryService : IMovieDiscoveryService
             })
             .ToListAsync(cancellationToken);
 
-        var ratings = await _db.MovieReviews
-            .AsNoTracking()
-            .Where(review => review.Status == "Visible")
-            .GroupBy(review => review.MovieId)
-            .Select(group => new
-            {
-                MovieId = group.Key,
-                AverageRating = group.Average(review => review.Rating),
-                ReviewCount = group.Count()
-            })
-            .ToListAsync(cancellationToken);
-
         var recentSalesByMovie = recentSales.ToDictionary(item => item.MovieId, item => item.TicketCount);
         var totalSalesByMovie = totalSales.ToDictionary(item => item.MovieId, item => item.TicketCount);
-        var ratingsByMovie = ratings.ToDictionary(item => item.MovieId);
 
         var releasedMovieIds = await _db.Movies
             .AsNoTracking()
@@ -71,10 +58,7 @@ public class MovieDiscoveryService : IMovieDiscoveryService
         var featuredIds = releasedMovieIds
             .OrderByDescending(movieId =>
                 recentSalesByMovie.GetValueOrDefault(movieId) * 3
-                + totalSalesByMovie.GetValueOrDefault(movieId)
-                + (ratingsByMovie.TryGetValue(movieId, out var rating)
-                    ? rating.AverageRating * 2 + Math.Min(rating.ReviewCount, 10)
-                    : 0))
+                + totalSalesByMovie.GetValueOrDefault(movieId))
             .Take(limit)
             .ToList();
 
@@ -83,12 +67,7 @@ public class MovieDiscoveryService : IMovieDiscoveryService
             .Select(item => item.MovieId)
             .Take(limit)
             .ToList();
-        var topRatedIds = ratings
-            .OrderByDescending(item => item.AverageRating)
-            .ThenByDescending(item => item.ReviewCount)
-            .Select(item => item.MovieId)
-            .Take(limit)
-            .ToList();
+        var topRatedIds = trendingIds;
         var bestSellingIds = totalSales
             .OrderByDescending(item => item.TicketCount)
             .Select(item => item.MovieId)

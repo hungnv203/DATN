@@ -10,6 +10,8 @@ using MovieBooking.Infrastructure.Persistence;
 using MovieBooking.Hubs;
 using MovieBooking.Realtime;
 using System.Text;
+using System.Security.Claims;
+using System.Threading.RateLimiting;
 
 System.AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
@@ -53,6 +55,21 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("Assistant", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? context.Connection.RemoteIpAddress?.ToString()
+            ?? "anonymous",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+});
 
 builder.Services.AddCors(options =>
 {
@@ -93,6 +110,7 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+
 var app = builder.Build();
 
 if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
@@ -110,11 +128,10 @@ if (builder.Configuration.GetValue<bool>("Database:SeedOnStartup"))
     await DbSeeder.SeedAsync(db, passwordHasher, builder.Configuration);
 }
 
-
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.MapOpenApi();
     app.UseSwagger();
@@ -128,6 +145,7 @@ app.UseHttpsRedirection();
 app.UseCors("ApplicationCors");
 
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();

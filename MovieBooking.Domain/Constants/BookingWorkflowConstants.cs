@@ -55,12 +55,6 @@ public static class TicketStatuses
     public const string Expired = "Expired";
 }
 
-public static class LoyaltyEffectTypes
-{
-    public const string Redeem = "Redeem";
-    public const string RedeemReturn = "RedeemReturn";
-    public const string Earn = "Earn";
-}
 
 public static class PaymentOperationTypes
 {

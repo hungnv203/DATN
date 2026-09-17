@@ -33,7 +33,6 @@ public sealed class PaymentWorkflowContractTests
 
         Assert.NotNull(operation.ClientIdempotencyKey);
         Assert.Null(operation.ProviderEventKey);
-        Assert.Equal("RedeemReturn", LoyaltyEffectTypes.RedeemReturn);
     }
 
     [Fact]

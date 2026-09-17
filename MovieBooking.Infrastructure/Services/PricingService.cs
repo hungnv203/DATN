@@ -85,103 +85,17 @@ public class PricingService : IPricingService
         }
 
         var subtotal = seatTotal + concessionTotal;
-        var discountAmount = await CalculatePromotionDiscountAsync(
-            request.PromotionCode,
-            subtotal,
-            cancellationToken);
-        var totalAfterPromotion = Math.Max(0, subtotal - discountAmount);
-        var pointDiscountAmount = await CalculatePointDiscountAsync(
-            userId,
-            request.UsedPoints,
-            totalAfterPromotion,
-            cancellationToken);
-        var effectiveUsedPoints = (int)pointDiscountAmount;
 
         return new BookingQuoteDto
         {
             SeatTotal = seatTotal,
             ConcessionTotal = concessionTotal,
             Subtotal = subtotal,
-            PromotionCode = string.IsNullOrWhiteSpace(request.PromotionCode)
-                ? null
-                : request.PromotionCode.Trim(),
-            DiscountAmount = discountAmount,
-            UsedPoints = effectiveUsedPoints,
-            PointDiscountAmount = pointDiscountAmount,
-            TotalPrice = Math.Max(0, totalAfterPromotion - pointDiscountAmount)
+            PromotionCode = null,
+            DiscountAmount = 0,
+            UsedPoints = 0,
+            PointDiscountAmount = 0,
+            TotalPrice = subtotal
         };
-    }
-
-    private async Task<decimal> CalculatePromotionDiscountAsync(
-        string? promotionCode,
-        decimal subtotal,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(promotionCode))
-        {
-            return 0;
-        }
-
-        var now = DateTime.UtcNow;
-        var normalizedCode = promotionCode.Trim().ToUpperInvariant();
-        var promotion = await _db.Promotions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                p => p.Code.ToUpper() == normalizedCode,
-                cancellationToken);
-        if (promotion == null)
-        {
-            throw new InvalidOperationException("Mã giảm giá không tồn tại.");
-        }
-
-        if (!string.Equals(promotion.Status, "Active", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("Mã giảm giá không còn hoạt động.");
-        }
-
-        if (promotion.StartDate > now || promotion.EndDate < now)
-        {
-            throw new InvalidOperationException("Mã giảm giá đã hết hạn hoặc chưa có hiệu lực.");
-        }
-
-        if (subtotal < promotion.MinOrder)
-        {
-            throw new InvalidOperationException("Đơn hàng chưa đạt giá trị tối thiểu để áp mã.");
-        }
-
-        var discount = string.Equals(promotion.DiscountType, "Percent", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(promotion.DiscountType, "Percentage", StringComparison.OrdinalIgnoreCase)
-                ? subtotal * promotion.DiscountValue / 100m
-                : promotion.DiscountValue;
-
-        return Math.Min(subtotal, Math.Max(0, discount));
-    }
-
-    private async Task<decimal> CalculatePointDiscountAsync(
-        Guid? userId,
-        int usedPoints,
-        decimal payableAmount,
-        CancellationToken cancellationToken)
-    {
-        if (usedPoints <= 0)
-        {
-            return 0;
-        }
-
-        if (userId == null || userId == Guid.Empty)
-        {
-            throw new InvalidOperationException("Vui lòng đăng nhập để sử dụng điểm.");
-        }
-
-        var wallet = await _db.LoyaltyPoints
-            .AsNoTracking()
-            .FirstOrDefaultAsync(lp => lp.UserId == userId.Value, cancellationToken);
-        var availablePoints = wallet?.Points ?? 0;
-        if (usedPoints > availablePoints)
-        {
-            throw new InvalidOperationException("Số điểm sử dụng vượt quá số dư hiện có.");
-        }
-
-        return Math.Min(payableAmount, usedPoints * PointValue);
     }
 }

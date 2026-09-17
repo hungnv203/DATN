@@ -32,19 +32,25 @@ public static class DependencyInjection
 
         services.AddAutoMapper(cfg => cfg.AddProfile<EntityDtoProfile>());
 
-        services.AddScoped<IBookingPromotionService, BookingPromotionService>();
+        services.AddOptions<AssistantOptions>()
+            .Bind(configuration.GetSection(AssistantOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                if (string.IsNullOrWhiteSpace(options.ApiKey))
+                {
+                    options.ApiKey = configuration["GEMINI_API_KEY"] ?? string.Empty;
+                }
+            });
+
         services.AddScoped<ICinemaService, CinemaService>();
         services.AddScoped<IConcessionService, ConcessionService>();
         services.AddScoped<IGenreService, GenreService>();
-        services.AddScoped<ILoyaltyPointService, LoyaltyPointService>();
         services.AddScoped<IMovieService, MovieService>();
         services.AddScoped<IMovieGenreService, MovieGenreService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IPaymentLogService, PaymentLogService>();
         services.AddScoped<IPermissionService, PermissionService>();
-        services.AddScoped<IPointTransactionService, PointTransactionService>();
-        services.AddScoped<IPromotionService, PromotionService>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IRolePermissionService, RolePermissionService>();
         services.AddScoped<IRoomService, RoomService>();
@@ -54,9 +60,14 @@ public static class DependencyInjection
         services.AddScoped<IUserManagementService, UserManagementService>();
         services.AddScoped<IBookingService, BookingService>();
         services.AddScoped<IPricingService, PricingService>();
-        services.AddScoped<ILoyaltyService, LoyaltyService>();
-        services.AddScoped<IMovieReviewService, MovieReviewService>();
         services.AddScoped<IMovieDiscoveryService, MovieDiscoveryService>();
+        services.AddScoped<IAssistantService, AssistantService>();
+        services.AddScoped<IAssistantMovieCatalogue, AssistantMovieCatalogue>();
+        var assistantOptions = configuration.GetSection(AssistantOptions.SectionName).Get<AssistantOptions>() ?? new AssistantOptions();
+        services.AddHttpClient<IAiAssistantClient, GeminiAssistantClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(assistantOptions.TimeoutSeconds, 5, 60));
+        });
         services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
         services.AddScoped<ITicketService, TicketService>();
         services.AddScoped<IShowtimeService, ShowtimeService>();

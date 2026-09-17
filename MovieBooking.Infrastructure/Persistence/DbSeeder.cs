@@ -81,9 +81,9 @@ public static class DbSeeder
         // 4. Seed All Standard Permissions
         var controllers = new[]
         {
-            "BookingPromotions", "Bookings", "Cinemas", "Genres", "LoyaltyPoints",
+            "Bookings", "Cinemas", "Genres",
             "MovieGenres", "Movies", "Notifications", "PaymentLogs", "Payments",
-            "Permissions", "PointTransactions", "Promotions", "RolePermissions",
+            "Permissions", "RolePermissions",
             "Roles", "Rooms", "SeatHolds", "Seats", "Showtimes", "Tickets",
             "UserRoles", "Users"
         };

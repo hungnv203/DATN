@@ -24,7 +24,6 @@ public class BookingService : IBookingService
     private readonly IMapper _mapper;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IPricingService _pricingService;
-    private readonly ILoyaltyService _loyaltyService;
     private readonly TimeProvider _timeProvider;
 
     public BookingService(
@@ -32,7 +31,6 @@ public class BookingService : IBookingService
         IMapper mapper,
         IHttpContextAccessor httpContextAccessor,
         IPricingService pricingService,
-        ILoyaltyService loyaltyService,
         TimeProvider timeProvider)
     {
         _operations = new EntityCrudOperations<Booking, BookingDto>(db, mapper);
@@ -40,7 +38,6 @@ public class BookingService : IBookingService
         _mapper = mapper;
         _httpContextAccessor = httpContextAccessor;
         _pricingService = pricingService;
-        _loyaltyService = loyaltyService;
         _timeProvider = timeProvider;
     }
 
@@ -294,24 +291,6 @@ public class BookingService : IBookingService
             }
         }
 
-        var bookingPromotions = new List<BookingPromotion>();
-        if (!string.IsNullOrWhiteSpace(dto.PromotionCode) && quote.DiscountAmount > 0)
-        {
-            var normalizedCode = dto.PromotionCode.Trim().ToUpperInvariant();
-            var promotion = await _db.Promotions.FirstOrDefaultAsync(
-                p => p.Code.ToUpper() == normalizedCode,
-                cancellationToken);
-            if (promotion != null)
-            {
-                bookingPromotions.Add(new BookingPromotion
-                {
-                    PromotionId = promotion.Id,
-                    Promotion = promotion,
-                    DiscountAmount = quote.DiscountAmount
-                });
-            }
-        }
-
         // Create booking
         var booking = new Booking
         {
@@ -321,14 +300,13 @@ public class BookingService : IBookingService
             Channel = isPointOfSale ? BookingChannels.PointOfSale : BookingChannels.CustomerOnline,
             Status = bookingStatus,
             Subtotal = quote.Subtotal,
-            DiscountAmount = quote.DiscountAmount,
-            PointDiscountAmount = quote.PointDiscountAmount,
-            UsedPoints = quote.UsedPoints,
+            DiscountAmount = 0,
+            PointDiscountAmount = 0,
+            UsedPoints = 0,
             TotalPrice = quote.TotalPrice,
             ExpiredAt = activeHoldRows[0].ExpiredAt,
             Tickets = tickets,
-            BookingConcessions = bookingConcessions,
-            BookingPromotions = bookingPromotions
+            BookingConcessions = bookingConcessions
         };
 
         await _db.Bookings.AddAsync(booking, cancellationToken);
@@ -340,17 +318,12 @@ public class BookingService : IBookingService
         }
 
         await _db.SaveChangesAsync(cancellationToken);
-        if (!isPointOfSale && quote.UsedPoints > 0)
-        {
-            await _loyaltyService.RedeemForBookingAsync(booking.Id, quote.UsedPoints, cancellationToken);
-            await _db.SaveChangesAsync(cancellationToken);
-        }
 
         await transaction.CommitAsync(cancellationToken);
 
         var resultDto = _mapper.Map<BookingDto>(booking);
         resultDto.SeatIds = dto.SeatIds; // Preserve seat IDs in result
-        resultDto.PromotionCode = dto.PromotionCode;
+        resultDto.PromotionCode = null;
         return resultDto;
     }
 
@@ -377,6 +350,61 @@ public class BookingService : IBookingService
                     .ThenInclude(bc => bc.Concession)
             .Include(t => t.Seat)
             .Where(t => t.Booking.UserId == userId)
+            .OrderByDescending(t => t.Booking.Showtime.StartTime)
+            .ToListAsync(cancellationToken);
+
+        var result = new List<MyTicketDto>();
+        foreach (var t in tickets)
+        {
+            result.Add(new MyTicketDto
+            {
+                Id = t.Id,
+                BookingId = t.BookingId,
+                MovieTitle = t.Booking.Showtime.Movie.Title,
+                CinemaName = t.Booking.Showtime.Room.Cinema.Name,
+                RoomName = t.Booking.Showtime.Room.Name,
+                StartTime = t.Booking.Showtime.StartTime,
+                SeatLabel = $"{t.Seat.RowLabel}{t.Seat.SeatNumber}",
+                QrCode = t.QrCode,
+                Status = t.Status,
+                PaymentStatus = t.Booking.Status,
+                Price = t.Price,
+                Concessions = t.Booking.BookingConcessions.Select(bc => new TicketConcessionDto
+                {
+                    Name = bc.Concession.Name,
+                    Quantity = bc.Quantity
+                }).ToList()
+            });
+        }
+
+        return result;
+    }
+
+    public async Task<List<MyTicketDto>> GetMySuccessfulTicketsAsync(CancellationToken cancellationToken = default)
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext == null) return new List<MyTicketDto>();
+
+        var user = httpContext.User;
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier) ?? user.FindFirst("sub");
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+            return new List<MyTicketDto>();
+
+        var tickets = await _db.Tickets
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.Showtime)
+                    .ThenInclude(s => s.Movie)
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.Showtime)
+                    .ThenInclude(s => s.Room)
+                        .ThenInclude(r => r.Cinema)
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.BookingConcessions)
+                    .ThenInclude(bc => bc.Concession)
+            .Include(t => t.Seat)
+            .Where(t => t.Booking.UserId == userId 
+                     && t.Status == TicketStatuses.Booked 
+                     && t.Booking.Status == BookingStatuses.Paid)
             .OrderByDescending(t => t.Booking.Showtime.StartTime)
             .ToListAsync(cancellationToken);
 

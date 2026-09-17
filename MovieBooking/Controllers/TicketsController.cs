@@ -11,11 +11,11 @@ namespace MovieBooking.Controllers;
 [Route("api/tickets")]
 public class TicketsController : CrudController<Ticket, TicketDto>
 {
-    private readonly AppDbContext _db;
+    private readonly ITicketService _ticketService;
 
-    public TicketsController(ITicketService crudService, AppDbContext db) : base(crudService)
+    public TicketsController(ITicketService crudService) : base(crudService)
     {
-        _db = db;
+        _ticketService = crudService;
     }
 
     public override Task<ActionResult<TicketDto>> Create(
@@ -38,40 +38,18 @@ public class TicketsController : CrudController<Ticket, TicketDto>
         [FromBody] CheckInRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(request.QrCode))
+        var result = await _ticketService.CheckInAsync(request.QrCode, cancellationToken);
+        
+        if (!result.Success)
         {
-            return BadRequest("QR Code is required");
+            if (result.Message.Contains("required") || result.Message.Contains("tồn tại"))
+            {
+                return NotFound(new { Success = false, Message = result.Message });
+            }
+            return BadRequest(new { Success = false, Message = result.Message });
         }
 
-        var ticket = await _db.Tickets
-            .Include(t => t.Booking)
-            .ThenInclude(b => b.Showtime)
-            .FirstOrDefaultAsync(t => t.QrCode == request.QrCode, cancellationToken);
-
-        if (ticket == null)
-        {
-            return NotFound(new { Success = false, Message = "Vé không tồn tại hoặc mã QR không hợp lệ." });
-        }
-
-        if (ticket.Status == "CheckedIn")
-        {
-            return BadRequest(new { Success = false, Message = "Vé này đã được sử dụng để check-in trước đó." });
-        }
-
-        if (ticket.Status == "Cancelled")
-        {
-            return BadRequest(new { Success = false, Message = "Vé này đã bị hủy." });
-        }
-
-        if (ticket.Booking.Status != "Paid")
-        {
-            return BadRequest(new { Success = false, Message = "Đơn vé chưa được thanh toán thành công." });
-        }
-
-        ticket.Status = "CheckedIn";
-        await _db.SaveChangesAsync(cancellationToken);
-
-        return Ok(new { Success = true, Message = "Check-in thành công!", TicketId = ticket.Id });
+        return Ok(new { Success = true, Message = result.Message, TicketId = result.TicketId });
     }
 }
 

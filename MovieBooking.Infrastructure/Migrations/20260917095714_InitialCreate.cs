@@ -28,6 +28,24 @@ namespace MovieBooking.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Concessions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Description = table.Column<string>(type: "text", nullable: false),
+                    Price = table.Column<decimal>(type: "numeric", nullable: false),
+                    ImageUrl = table.Column<string>(type: "text", nullable: false),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Concessions", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Genres",
                 columns: table => new
                 {
@@ -63,23 +81,18 @@ namespace MovieBooking.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Promotions",
+                name: "Permissions",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Code = table.Column<string>(type: "text", nullable: false),
-                    DiscountType = table.Column<string>(type: "text", nullable: false),
-                    DiscountValue = table.Column<decimal>(type: "numeric", nullable: false),
-                    StartDate = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    EndDate = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    MinOrder = table.Column<decimal>(type: "numeric", nullable: false),
-                    Status = table.Column<string>(type: "text", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Description = table.Column<string>(type: "text", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Promotions", x => x.Id);
+                    table.PrimaryKey("PK_Permissions", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -168,22 +181,28 @@ namespace MovieBooking.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "LoyaltyPoints",
+                name: "RolePermissions",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Points = table.Column<int>(type: "integer", nullable: false),
+                    RoleId = table.Column<Guid>(type: "uuid", nullable: false),
+                    PermissionId = table.Column<Guid>(type: "uuid", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_LoyaltyPoints", x => x.Id);
+                    table.PrimaryKey("PK_RolePermissions", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_LoyaltyPoints_Users_UserId",
-                        column: x => x.UserId,
-                        principalTable: "Users",
+                        name: "FK_RolePermissions_Permissions_PermissionId",
+                        column: x => x.PermissionId,
+                        principalTable: "Permissions",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_RolePermissions_Roles_RoleId",
+                        column: x => x.RoleId,
+                        principalTable: "Roles",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -206,28 +225,6 @@ namespace MovieBooking.Infrastructure.Migrations
                     table.PrimaryKey("PK_Notifications", x => x.Id);
                     table.ForeignKey(
                         name: "FK_Notifications_Users_UserId",
-                        column: x => x.UserId,
-                        principalTable: "Users",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "PointTransactions",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Points = table.Column<int>(type: "integer", nullable: false),
-                    Type = table.Column<string>(type: "text", nullable: false),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_PointTransactions", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_PointTransactions_Users_UserId",
                         column: x => x.UserId,
                         principalTable: "Users",
                         principalColumn: "Id",
@@ -322,7 +319,13 @@ namespace MovieBooking.Infrastructure.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     ShowtimeId = table.Column<Guid>(type: "uuid", nullable: false),
+                    SeatHoldGroupId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Channel = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false, defaultValue: "CustomerOnline"),
                     Status = table.Column<string>(type: "text", nullable: false),
+                    Subtotal = table.Column<decimal>(type: "numeric", nullable: false),
+                    DiscountAmount = table.Column<decimal>(type: "numeric", nullable: false),
+                    PointDiscountAmount = table.Column<decimal>(type: "numeric", nullable: false),
+                    UsedPoints = table.Column<int>(type: "integer", nullable: false),
                     TotalPrice = table.Column<decimal>(type: "numeric", nullable: false),
                     ExpiredAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
@@ -350,10 +353,15 @@ namespace MovieBooking.Infrastructure.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    HoldGroupId = table.Column<Guid>(type: "uuid", nullable: false),
                     ShowtimeId = table.Column<Guid>(type: "uuid", nullable: false),
                     SeatId = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    BookingId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Status = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     ExpiredAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
+                    ReleasedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
+                    CompletedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
@@ -381,31 +389,50 @@ namespace MovieBooking.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "BookingPromotions",
+                name: "ShowtimeSeatVersions",
+                columns: table => new
+                {
+                    ShowtimeId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Version = table.Column<long>(type: "bigint", nullable: false, defaultValue: 0L)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ShowtimeSeatVersions", x => x.ShowtimeId);
+                    table.ForeignKey(
+                        name: "FK_ShowtimeSeatVersions_Showtimes_ShowtimeId",
+                        column: x => x.ShowtimeId,
+                        principalTable: "Showtimes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "BookingConcessions",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     BookingId = table.Column<Guid>(type: "uuid", nullable: false),
-                    PromotionId = table.Column<Guid>(type: "uuid", nullable: false),
-                    DiscountAmount = table.Column<decimal>(type: "numeric", nullable: false),
+                    ConcessionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Quantity = table.Column<int>(type: "integer", nullable: false),
+                    Price = table.Column<decimal>(type: "numeric", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_BookingPromotions", x => x.Id);
+                    table.PrimaryKey("PK_BookingConcessions", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_BookingPromotions_Bookings_BookingId",
+                        name: "FK_BookingConcessions_Bookings_BookingId",
                         column: x => x.BookingId,
                         principalTable: "Bookings",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_BookingPromotions_Promotions_PromotionId",
-                        column: x => x.PromotionId,
-                        principalTable: "Promotions",
+                        name: "FK_BookingConcessions_Concessions_ConcessionId",
+                        column: x => x.ConcessionId,
+                        principalTable: "Concessions",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -484,16 +511,59 @@ namespace MovieBooking.Infrastructure.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
-            migrationBuilder.CreateIndex(
-                name: "IX_BookingPromotions_BookingId_PromotionId",
-                table: "BookingPromotions",
-                columns: new[] { "BookingId", "PromotionId" },
-                unique: true);
+            migrationBuilder.CreateTable(
+                name: "PaymentOperations",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    BookingId = table.Column<Guid>(type: "uuid", nullable: false),
+                    PaymentId = table.Column<Guid>(type: "uuid", nullable: true),
+                    ClientIdempotencyKey = table.Column<Guid>(type: "uuid", nullable: true),
+                    ProviderEventKey = table.Column<string>(type: "character(64)", fixedLength: true, maxLength: 64, nullable: true),
+                    OperationType = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    Method = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
+                    RequestFingerprint = table.Column<string>(type: "text", nullable: false),
+                    Result = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    ReasonCode = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    ActorUserId = table.Column<Guid>(type: "uuid", nullable: true),
+                    CompletedAtUtc = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PaymentOperations", x => x.Id);
+                    table.CheckConstraint("CK_PaymentOperations_IdempotencyDomain", "(\"ClientIdempotencyKey\" IS NOT NULL AND \"ProviderEventKey\" IS NULL) OR (\"ClientIdempotencyKey\" IS NULL AND \"ProviderEventKey\" IS NOT NULL)");
+                    table.ForeignKey(
+                        name: "FK_PaymentOperations_Bookings_BookingId",
+                        column: x => x.BookingId,
+                        principalTable: "Bookings",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_PaymentOperations_Payments_PaymentId",
+                        column: x => x.PaymentId,
+                        principalTable: "Payments",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
 
             migrationBuilder.CreateIndex(
-                name: "IX_BookingPromotions_PromotionId",
-                table: "BookingPromotions",
-                column: "PromotionId");
+                name: "IX_BookingConcessions_BookingId",
+                table: "BookingConcessions",
+                column: "BookingId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BookingConcessions_ConcessionId",
+                table: "BookingConcessions",
+                column: "ConcessionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Bookings_SeatHoldGroupId",
+                table: "Bookings",
+                column: "SeatHoldGroupId",
+                unique: true,
+                filter: "\"SeatHoldGroupId\" IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Bookings_ShowtimeId",
@@ -504,12 +574,6 @@ namespace MovieBooking.Infrastructure.Migrations
                 name: "IX_Bookings_UserId",
                 table: "Bookings",
                 column: "UserId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_LoyaltyPoints_UserId",
-                table: "LoyaltyPoints",
-                column: "UserId",
-                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_MovieGenres_GenreId",
@@ -533,15 +597,52 @@ namespace MovieBooking.Infrastructure.Migrations
                 column: "PaymentId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PaymentOperations_BookingId",
+                table: "PaymentOperations",
+                column: "BookingId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PaymentOperations_ClientIdempotencyKey",
+                table: "PaymentOperations",
+                column: "ClientIdempotencyKey",
+                unique: true,
+                filter: "\"ClientIdempotencyKey\" IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PaymentOperations_PaymentId",
+                table: "PaymentOperations",
+                column: "PaymentId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PaymentOperations_ProviderEventKey",
+                table: "PaymentOperations",
+                column: "ProviderEventKey",
+                unique: true,
+                filter: "\"ProviderEventKey\" IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Payments_BookingId",
                 table: "Payments",
                 column: "BookingId",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_PointTransactions_UserId",
-                table: "PointTransactions",
-                column: "UserId");
+                name: "IX_Payments_Method_TransactionCode",
+                table: "Payments",
+                columns: new[] { "Method", "TransactionCode" },
+                unique: true,
+                filter: "\"TransactionCode\" <> ''");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RolePermissions_PermissionId",
+                table: "RolePermissions",
+                column: "PermissionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RolePermissions_RoleId_PermissionId",
+                table: "RolePermissions",
+                columns: new[] { "RoleId", "PermissionId" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Rooms_CinemaId",
@@ -549,14 +650,26 @@ namespace MovieBooking.Infrastructure.Migrations
                 column: "CinemaId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_SeatHolds_HoldGroupId_UserId",
+                table: "SeatHolds",
+                columns: new[] { "HoldGroupId", "UserId" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_SeatHolds_SeatId",
                 table: "SeatHolds",
                 column: "SeatId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_SeatHolds_ShowtimeId",
+                name: "IX_SeatHolds_ShowtimeId_SeatId",
                 table: "SeatHolds",
-                column: "ShowtimeId");
+                columns: new[] { "ShowtimeId", "SeatId" },
+                unique: true,
+                filter: "\"Status\" = 'Active'");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SeatHolds_Status_ExpiredAt",
+                table: "SeatHolds",
+                columns: new[] { "Status", "ExpiredAt" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_SeatHolds_UserId",
@@ -610,10 +723,7 @@ namespace MovieBooking.Infrastructure.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "BookingPromotions");
-
-            migrationBuilder.DropTable(
-                name: "LoyaltyPoints");
+                name: "BookingConcessions");
 
             migrationBuilder.DropTable(
                 name: "MovieGenres");
@@ -625,10 +735,16 @@ namespace MovieBooking.Infrastructure.Migrations
                 name: "PaymentLogs");
 
             migrationBuilder.DropTable(
-                name: "PointTransactions");
+                name: "PaymentOperations");
+
+            migrationBuilder.DropTable(
+                name: "RolePermissions");
 
             migrationBuilder.DropTable(
                 name: "SeatHolds");
+
+            migrationBuilder.DropTable(
+                name: "ShowtimeSeatVersions");
 
             migrationBuilder.DropTable(
                 name: "Tickets");
@@ -637,13 +753,16 @@ namespace MovieBooking.Infrastructure.Migrations
                 name: "UserRoles");
 
             migrationBuilder.DropTable(
-                name: "Promotions");
+                name: "Concessions");
 
             migrationBuilder.DropTable(
                 name: "Genres");
 
             migrationBuilder.DropTable(
                 name: "Payments");
+
+            migrationBuilder.DropTable(
+                name: "Permissions");
 
             migrationBuilder.DropTable(
                 name: "Seats");

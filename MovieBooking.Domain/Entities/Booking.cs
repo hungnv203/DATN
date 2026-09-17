@@ -20,8 +20,5 @@ public class Booking : BaseEntity
     public ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();
     public Payment? Payment { get; set; }
     public ICollection<PaymentOperation> PaymentOperations { get; set; } = new List<PaymentOperation>();
-    public ICollection<BookingPromotion> BookingPromotions { get; set; } = new List<BookingPromotion>();
     public ICollection<BookingConcession> BookingConcessions { get; set; } = new List<BookingConcession>();
-    public ICollection<MovieReview> MovieReviews { get; set; } = new List<MovieReview>();
-    public ICollection<PointTransaction> PointTransactions { get; set; } = new List<PointTransaction>();
 }

@@ -11,4 +11,11 @@ public class TicketDto
     public string MovieTitle { get; set; } = string.Empty;
     public string SeatLabel { get; set; } = string.Empty;
     public string PaymentStatus { get; set; } = string.Empty;
+
+    public DateTime CreatedAt { get; set; }
+    public string CinemaName { get; set; } = string.Empty;
+    public string RoomName { get; set; } = string.Empty;
+    public DateTime StartTime { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string CustomerEmail { get; set; } = string.Empty;
 }

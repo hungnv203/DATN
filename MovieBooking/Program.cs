@@ -125,7 +125,8 @@ if (builder.Configuration.GetValue<bool>("Database:SeedOnStartup"))
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-    await DbSeeder.SeedAsync(db, passwordHasher, builder.Configuration);
+    var embeddingSync = scope.ServiceProvider.GetService<IEmbeddingSyncService>();
+    await DbSeeder.SeedAsync(db, passwordHasher, builder.Configuration, embeddingSync);
 }
 
 // Configure the HTTP request pipeline.

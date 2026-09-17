@@ -32,6 +32,8 @@ public class AppDbContext : DbContext
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Concession> Concessions => Set<Concession>();
     public DbSet<BookingConcession> BookingConcessions => Set<BookingConcession>();
+    public DbSet<MovieEmbedding> MovieEmbeddings => Set<MovieEmbedding>();
+    public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -175,5 +177,33 @@ public class AppDbContext : DbContext
             .WithMany(x => x.BookingConcessions)
             .HasForeignKey(x => x.ConcessionId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<MovieEmbedding>()
+            .HasOne(x => x.Movie)
+            .WithMany()
+            .HasForeignKey(x => x.MovieId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<MovieEmbedding>()
+            .HasIndex(x => x.MovieId)
+            .IsUnique();
+
+        modelBuilder.Entity<MovieEmbedding>()
+            .Property(x => x.Embedding)
+            .HasColumnType("real[]");
+
+        modelBuilder.Entity<KnowledgeDocument>()
+            .HasOne(x => x.Cinema)
+            .WithMany()
+            .HasForeignKey(x => x.CinemaId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<KnowledgeDocument>()
+            .Property(x => x.Embedding)
+            .HasColumnType("real[]");
+
+        modelBuilder.Entity<KnowledgeDocument>()
+            .Property(x => x.Category)
+            .HasMaxLength(32);
     }
 }

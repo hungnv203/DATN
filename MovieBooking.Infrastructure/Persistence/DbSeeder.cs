@@ -10,7 +10,8 @@ public static class DbSeeder
     public static async Task SeedAsync(
         AppDbContext db,
         IPasswordHasher passwordHasher,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IEmbeddingSyncService? embeddingSync = null)
     {
         // 1. Seed Roles
         var defaultRoles = new[]
@@ -134,5 +135,11 @@ public static class DbSeeder
         }
 
         await db.SaveChangesAsync();
+
+        if (embeddingSync != null)
+        {
+            await embeddingSync.SyncKnowledgeDocumentsAsync();
+            await embeddingSync.SyncMovieEmbeddingsAsync();
+        }
     }
 }

@@ -10,6 +10,7 @@ using MovieBooking.Infrastructure.Mapping;
 using MovieBooking.Infrastructure.Persistence;
 using MovieBooking.Infrastructure.Security;
 using MovieBooking.Infrastructure.Services;
+using MovieBooking.Infrastructure.Services.Assistant;
 using MovieBooking.Infrastructure.Services.Payment;
 
 namespace MovieBooking.Infrastructure;
@@ -68,6 +69,12 @@ public static class DependencyInjection
         {
             client.Timeout = TimeSpan.FromSeconds(Math.Clamp(assistantOptions.TimeoutSeconds, 5, 60));
         });
+        services.AddHttpClient<IEmbeddingService, GeminiEmbeddingClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(assistantOptions.TimeoutSeconds, 5, 60));
+        });
+        services.AddSingleton<IVectorSearchEngine, VectorSearchEngine>();
+        services.AddScoped<IEmbeddingSyncService, EmbeddingSyncService>();
         services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
         services.AddScoped<ITicketService, TicketService>();
         services.AddScoped<IShowtimeService, ShowtimeService>();
@@ -78,6 +85,7 @@ public static class DependencyInjection
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IVnPayService, VnPayService>();
         services.AddScoped<IPaymentWorkflowService, PaymentWorkflowService>();
+        services.AddScoped<IDashboardService, DashboardService>();
         services.AddHostedService<ExpiredSeatHoldsCleanupService>();
         services.AddHostedService<ExpiredBookingsCleanupService>();
         services.AddHostedService<MovieStatusUpdateService>();

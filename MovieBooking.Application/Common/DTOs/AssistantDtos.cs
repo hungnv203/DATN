@@ -35,6 +35,8 @@ public sealed class AssistantMovieCardDto
     public string Status { get; init; } = string.Empty;
     public IReadOnlyList<string> Genres { get; init; } = [];
     public string Reason { get; init; } = string.Empty;
+    /// <summary>Upcoming showtimes for this movie within the next 7 days (max 5 per movie).</summary>
+    public IReadOnlyList<AssistantShowtimeDto> UpcomingShowtimes { get; init; } = [];
 }
 
 public sealed class AssistantResponseDto
@@ -70,6 +72,7 @@ public sealed class AiAssistantRequest
     public IReadOnlyList<AssistantMessageDto> History { get; init; } = [];
     public IReadOnlyList<AssistantMovieCandidateDto> Movies { get; init; } = [];
     public int MaxCards { get; init; } = 5;
+    public string Context { get; init; } = string.Empty;
 }
 
 public sealed class AiAssistantResult
@@ -80,4 +83,25 @@ public sealed class AiAssistantResult
     public IReadOnlyList<Guid> MovieIds { get; init; } = [];
     public IReadOnlyDictionary<Guid, string> Reasons { get; init; } = new Dictionary<Guid, string>();
     public IReadOnlyList<string> ClarificationChoices { get; init; } = [];
+}
+
+public sealed class AssistantKnowledgeDocumentDto
+{
+    public Guid Id { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public string Category { get; init; } = string.Empty;
+    public string Content { get; init; } = string.Empty;
+}
+
+public sealed class AssistantShowtimeDto
+{
+    public Guid ShowtimeId { get; init; }
+    public Guid MovieId { get; init; }
+    public string MovieTitle { get; init; } = string.Empty;
+    public string CinemaName { get; init; } = string.Empty;
+    public string RoomName { get; init; } = string.Empty;
+    public string RoomType { get; init; } = string.Empty;
+    public DateTime StartTime { get; init; }
+    public DateTime EndTime { get; init; }
+    public decimal BasePrice { get; init; }
 }

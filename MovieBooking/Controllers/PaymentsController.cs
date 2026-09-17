@@ -232,7 +232,19 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
         var statusDesc = isSuccess
             ? "Giao dịch của bạn đã được ghi nhận thành công. Cửa sổ này sẽ tự động đóng."
             : "Giao dịch đã bị hủy hoặc xảy ra lỗi trong quá trình thanh toán. Cửa sổ này sẽ tự động đóng.";
+        if (Request.Headers.Accept.ToString().Contains("application/json"))
+        {
+            return Ok(new
+            {
+                Success = isSuccess,
+                BookingId = bookingId,
+                ResponseCode = response.VnPayResponseCode,
+                TransactionStatus = response.TransactionStatus
+            });
+        }
+
         var icon = isSuccess ? "✅" : "⚠️";
+        var deepLink = $"moviebooking://payment-result?bookingId={bookingId}&status={(isSuccess ? "Paid" : "Failed")}";
 
         var html = $@"<!DOCTYPE html>
 <html lang=""vi"">
@@ -269,12 +281,14 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
             background-color: #e50914;
             color: white;
             border: none;
-            padding: 12px 28px;
+            padding: 14px 28px;
             border-radius: 8px;
-            font-size: 15px;
+            font-size: 16px;
             font-weight: 600;
             cursor: pointer;
             text-decoration: none;
+            width: 100%;
+            box-sizing: border-box;
         }}
     </style>
 </head>
@@ -283,15 +297,21 @@ public class PaymentsController : CrudController<Payment, PaymentDto>
         <div class=""icon"">{icon}</div>
         <h2>{statusTitle}</h2>
         <p>{statusDesc}</p>
-        <button class=""btn"" onclick=""closeWindow()"">Đóng cửa sổ</button>
+        <button class=""btn"" onclick=""closeWindow()"">Quay lại ứng dụng (Đóng cửa sổ)</button>
     </div>
     <script>
         function closeWindow() {{
             try {{
+                // Điều hướng về Movie Booking mobile app qua deep link
+                window.location.href = ""{deepLink}"";
+            }} catch (e) {{}}
+            // Thử đóng cửa sổ nếu là popup trên desktop browser
+            try {{
                 window.close();
             }} catch (e) {{}}
         }}
-        setTimeout(closeWindow, 2000);
+        // Tự động chuyển tiếp về app sau 1.5 giây
+        setTimeout(closeWindow, 1500);
     </script>
 </body>
 </html>";

@@ -59,9 +59,18 @@ public class BookingService : IBookingService
         var isAdminOrManager = user.IsInRole("Admin") || user.IsInRole("Manager") || user.IsInRole("Cashier");
 
         IQueryable<Booking> query = _db.Bookings
+            .AsSplitQuery()
             .Include(b => b.Tickets)
+                .ThenInclude(t => t.Seat)
             .Include(b => b.BookingConcessions)
-                .ThenInclude(bc => bc.Concession);
+                .ThenInclude(bc => bc.Concession)
+            .Include(b => b.Showtime)
+                .ThenInclude(s => s.Movie)
+            .Include(b => b.Showtime)
+                .ThenInclude(s => s.Room)
+                    .ThenInclude(r => r.Cinema)
+            .Include(b => b.User)
+            .Include(b => b.Payment);
         if (!isAdminOrManager)
         {
             query = query.Where(b => b.UserId == userId);
@@ -78,9 +87,18 @@ public class BookingService : IBookingService
     public async Task<BookingDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var booking = await _db.Bookings
+            .AsSplitQuery()
             .Include(b => b.Tickets)
+                .ThenInclude(t => t.Seat)
             .Include(b => b.BookingConcessions)
                 .ThenInclude(bc => bc.Concession)
+            .Include(b => b.Showtime)
+                .ThenInclude(s => s.Movie)
+            .Include(b => b.Showtime)
+                .ThenInclude(s => s.Room)
+                    .ThenInclude(r => r.Cinema)
+            .Include(b => b.User)
+            .Include(b => b.Payment)
             .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
         if (booking == null) return null;
 
@@ -164,6 +182,28 @@ public class BookingService : IBookingService
         var activeHoldRows = new List<SeatHold>();
         if (dto.SeatHoldGroupId.HasValue)
         {
+            var existingBooking = await _db.Bookings
+                .Include(b => b.Tickets)
+                .Include(b => b.BookingConcessions)
+                .FirstOrDefaultAsync(
+                    b => b.SeatHoldGroupId == dto.SeatHoldGroupId.Value && b.UserId == finalUserId,
+                    cancellationToken);
+
+            if (existingBooking != null)
+            {
+                if (existingBooking.Status == BookingStatuses.Pending && existingBooking.ExpiredAt > now)
+                {
+                    var existingDto = _mapper.Map<BookingDto>(existingBooking);
+                    existingDto.SeatIds = existingBooking.Tickets.Select(t => t.SeatId).ToList();
+                    return existingDto;
+                }
+
+                if (existingBooking.Status == BookingStatuses.Paid)
+                {
+                    throw new InvalidOperationException("Đơn đặt vé cho lượt giữ chỗ này đã được thanh toán.");
+                }
+            }
+
             var activeOwnedHolds = await _db.SeatHolds
                 .Where(hold => hold.ShowtimeId == dto.ShowtimeId
                                && hold.UserId == finalUserId

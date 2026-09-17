@@ -45,7 +45,13 @@ public class TicketService : ITicketService
             .Include(t => t.Seat)
             .Include(t => t.Booking)
                 .ThenInclude(b => b.Showtime)
-                    .ThenInclude(s => s.Movie);
+                    .ThenInclude(s => s.Movie)
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.Showtime)
+                    .ThenInclude(s => s.Room)
+                        .ThenInclude(r => r.Cinema)
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.User);
         if (!isAdminOrManager)
         {
             query = query.Where(t => t.Booking.UserId == userId);
@@ -66,6 +72,12 @@ public class TicketService : ITicketService
             .Include(t => t.Booking)
                 .ThenInclude(b => b.Showtime)
                     .ThenInclude(s => s.Movie)
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.Showtime)
+                    .ThenInclude(s => s.Room)
+                        .ThenInclude(r => r.Cinema)
+            .Include(t => t.Booking)
+                .ThenInclude(b => b.User)
             .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
         if (ticket == null) return null;
 

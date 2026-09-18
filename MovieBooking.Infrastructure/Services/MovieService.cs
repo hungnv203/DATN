@@ -97,7 +97,7 @@ internal sealed class MovieService : IMovieService
 
                 foreach (var gid in validGenreIds.Distinct())
                 {
-                    movie.MovieGenres.Add(new MovieGenre { MovieId = movie.Id, GenreId = gid });
+                    _db.MovieGenres.Add(new MovieGenre { MovieId = movie.Id, GenreId = gid });
                 }
             }
         }
@@ -109,4 +109,3 @@ internal sealed class MovieService : IMovieService
     public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
         _operations.DeleteAsync(id, cancellationToken);
 }
-

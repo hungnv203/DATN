@@ -33,6 +33,7 @@ public class AppDbContext : DbContext
     public DbSet<Concession> Concessions => Set<Concession>();
     public DbSet<BookingConcession> BookingConcessions => Set<BookingConcession>();
     public DbSet<MovieEmbedding> MovieEmbeddings => Set<MovieEmbedding>();
+    public DbSet<MovieEmbeddingSyncState> MovieEmbeddingSyncStates => Set<MovieEmbeddingSyncState>();
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -191,6 +192,31 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<MovieEmbedding>()
             .Property(x => x.Embedding)
             .HasColumnType("real[]");
+
+        modelBuilder.Entity<MovieEmbeddingSyncState>()
+            .HasOne(x => x.Movie)
+            .WithMany()
+            .HasForeignKey(x => x.MovieId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<MovieEmbeddingSyncState>()
+            .HasIndex(x => x.MovieId)
+            .IsUnique();
+
+        modelBuilder.Entity<MovieEmbeddingSyncState>()
+            .HasIndex(x => new { x.Status, x.NextAttemptAt });
+
+        modelBuilder.Entity<MovieEmbeddingSyncState>()
+            .Property(x => x.Status)
+            .HasMaxLength(16);
+
+        modelBuilder.Entity<MovieEmbeddingSyncState>()
+            .Property(x => x.RequestedContentHash)
+            .HasMaxLength(64);
+
+        modelBuilder.Entity<MovieEmbeddingSyncState>()
+            .Property(x => x.LastError)
+            .HasMaxLength(512);
 
         modelBuilder.Entity<KnowledgeDocument>()
             .HasOne(x => x.Cinema)

@@ -42,6 +42,8 @@ public static class DependencyInjection
                     options.ApiKey = configuration["GEMINI_API_KEY"] ?? string.Empty;
                 }
             });
+        services.AddOptions<MovieEmbeddingRetryOptions>()
+            .Bind(configuration.GetSection(MovieEmbeddingRetryOptions.SectionName));
 
         services.AddScoped<ICinemaService, CinemaService>();
         services.AddScoped<IConcessionService, ConcessionService>();
@@ -89,6 +91,7 @@ public static class DependencyInjection
         services.AddHostedService<ExpiredSeatHoldsCleanupService>();
         services.AddHostedService<ExpiredBookingsCleanupService>();
         services.AddHostedService<MovieStatusUpdateService>();
+        services.AddHostedService<MovieEmbeddingRetryService>();
 
         services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, PermissionAuthorizationHandler>();

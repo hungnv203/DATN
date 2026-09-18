@@ -48,5 +48,22 @@ public class MoviesController : CrudController<Movie, MovieDto>
     {
         return await base.GetById(id, cancellationToken);
     }
-}
 
+    [HttpPut("{id:guid}")]
+    [MovieBooking.Infrastructure.Security.HasPermission("Update")]
+    public override async Task<IActionResult> Update(
+        Guid id,
+        [FromBody] MovieDto dto,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var updated = await _movieService.UpdateWithEmbeddingAsync(id, dto, cancellationToken);
+            return updated is null ? NotFound() : Ok(updated);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+}

@@ -1,7 +1,11 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using MovieBooking.Application.Common.Configuration;
 using MovieBooking.Application.Common.DTOs;
+using MovieBooking.Application.Common.Interfaces;
+using MovieBooking.Domain.Constants;
 using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Mapping;
 using MovieBooking.Infrastructure.Persistence;
@@ -33,7 +37,12 @@ public sealed class MovieServiceTests
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var service = new MovieService(db, CreateMapper());
+        var service = new MovieService(
+            db,
+            CreateMapper(),
+            new NoOpEmbeddingSyncService(),
+            Options.Create(new MovieEmbeddingRetryOptions()),
+            TimeProvider.System);
         var dto = new MovieDto
         {
             Id = movie.Id,
@@ -69,5 +78,23 @@ public sealed class MovieServiceTests
         services.AddLogging();
         services.AddAutoMapper(config => config.AddProfile<EntityDtoProfile>());
         return services.BuildServiceProvider().GetRequiredService<IMapper>();
+    }
+
+    private sealed class NoOpEmbeddingSyncService : IEmbeddingSyncService
+    {
+        public Task<MovieEmbeddingSyncResult> SyncMovieEmbeddingAsync(
+            Guid movieId,
+            bool isRetryAttempt = false,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new MovieEmbeddingSyncResult(MovieEmbeddingSyncStatuses.Ready));
+
+        public Task SyncMovieEmbeddingsAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RemoveMovieEmbeddingAsync(Guid movieId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task SyncKnowledgeDocumentsAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }

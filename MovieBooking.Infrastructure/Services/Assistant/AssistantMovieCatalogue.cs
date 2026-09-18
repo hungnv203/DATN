@@ -55,7 +55,9 @@ public sealed class AssistantMovieCatalogue : IAssistantMovieCatalogue
         var movieEmbeddings = await _db.MovieEmbeddings
             .AsNoTracking()
             .Include(e => e.Movie)
-            .Where(e => e.Movie.Status != "Inactive")
+            .Where(e => e.Movie.Status != "Inactive"
+                && e.Embedding.Length > 0
+                && !_db.MovieEmbeddingSyncStates.Any(state => state.MovieId == e.MovieId))
             .ToListAsync(cancellationToken);
 
         var candidates = movieEmbeddings.Select(e => new VectorSearchCandidate

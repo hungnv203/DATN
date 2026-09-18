@@ -33,6 +33,7 @@ public class EntityDtoProfile : Profile
         CreateMap<SeatDto, Seat>().IgnoreBaseEntityFromDto();
 
         CreateMap<Movie, MovieDto>()
+            .ForMember(dest => dest.EmbeddingStatus, opt => opt.Ignore())
             .ForMember(dest => dest.Genres, opt => opt.MapFrom(src => src.MovieGenres != null ? src.MovieGenres.Where(mg => mg.Genre != null).Select(mg => mg.Genre.Name).OrderBy(n => n).ToList() : new List<string>()))
             .ForMember(dest => dest.GenreIds, opt => opt.MapFrom(src => src.MovieGenres != null ? src.MovieGenres.Select(mg => mg.GenreId).ToList() : new List<Guid>()));
         CreateMap<MovieDto, Movie>()

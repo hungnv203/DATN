@@ -1,8 +1,11 @@
-using System.Security.Cryptography;
-using System.Text;
+using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using MovieBooking.Application.Common.Configuration;
+using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
+using MovieBooking.Domain.Constants;
 using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Persistence;
 
@@ -10,75 +13,223 @@ namespace MovieBooking.Infrastructure.Services.Assistant;
 
 public sealed class EmbeddingSyncService : IEmbeddingSyncService
 {
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> MovieLocks = new();
+
     private readonly AppDbContext _db;
     private readonly IEmbeddingService _embeddingService;
     private readonly ILogger<EmbeddingSyncService> _logger;
+    private readonly MovieEmbeddingRetryOptions _retryOptions;
+    private readonly TimeProvider _timeProvider;
 
     public EmbeddingSyncService(
         AppDbContext db,
         IEmbeddingService embeddingService,
-        ILogger<EmbeddingSyncService> logger)
+        ILogger<EmbeddingSyncService> logger,
+        IOptions<MovieEmbeddingRetryOptions> retryOptions,
+        TimeProvider timeProvider)
     {
         _db = db;
         _embeddingService = embeddingService;
         _logger = logger;
+        _retryOptions = retryOptions.Value;
+        _timeProvider = timeProvider;
     }
 
     public async Task SyncMovieEmbeddingsAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            var movies = await _db.Movies
-                .Include(m => m.MovieGenres)
-                    .ThenInclude(mg => mg.Genre)
+            var activeMovieIds = await _db.Movies
+                .AsNoTracking()
                 .Where(m => m.Status != "Inactive")
+                .Select(m => m.Id)
                 .ToListAsync(cancellationToken);
 
-            var existingEmbeddings = await _db.MovieEmbeddings
-                .ToDictionaryAsync(e => e.MovieId, cancellationToken);
+            var inactiveMovieIds = await _db.Movies
+                .AsNoTracking()
+                .Where(m => m.Status == "Inactive")
+                .Where(m => _db.MovieEmbeddings.Any(e => e.MovieId == m.Id)
+                    || _db.MovieEmbeddingSyncStates.Any(s => s.MovieId == m.Id))
+                .Select(m => m.Id)
+                .ToListAsync(cancellationToken);
 
-            foreach (var movie in movies)
+            foreach (var movieId in inactiveMovieIds)
             {
-                var embeddedText = BuildMovieEmbeddedText(movie);
-                var contentHash = ComputeHash(embeddedText);
-
-                if (existingEmbeddings.TryGetValue(movie.Id, out var existing))
-                {
-                    if (existing.ContentHash == contentHash) continue;
-
-                    _logger.LogInformation("Re-embedding movie {MovieId} due to content change.", movie.Id);
-                    var embedding = await _embeddingService.EmbedAsync(embeddedText, cancellationToken);
-                    if (embedding.Length > 0)
-                    {
-                        existing.EmbeddedText = embeddedText;
-                        existing.ContentHash = contentHash;
-                        existing.Embedding = embedding;
-                        existing.LastUpdatedAt = DateTime.UtcNow;
-                    }
-                }
-                else
-                {
-                    _logger.LogInformation("Creating embedding for new movie {MovieId}.", movie.Id);
-                    var embedding = await _embeddingService.EmbedAsync(embeddedText, cancellationToken);
-                    if (embedding.Length > 0)
-                    {
-                        _db.MovieEmbeddings.Add(new MovieEmbedding
-                        {
-                            MovieId = movie.Id,
-                            EmbeddedText = embeddedText,
-                            ContentHash = contentHash,
-                            Embedding = embedding,
-                            LastUpdatedAt = DateTime.UtcNow
-                        });
-                    }
-                }
+                await RemoveMovieEmbeddingAsync(movieId, cancellationToken);
             }
 
-            await _db.SaveChangesAsync(cancellationToken);
+            foreach (var movieId in activeMovieIds)
+            {
+                await SyncMovieEmbeddingAsync(movieId, cancellationToken: cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to sync movie embeddings. Semantic search will fallback to traditional catalogue.");
+        }
+    }
+
+    public async Task<MovieEmbeddingSyncResult> SyncMovieEmbeddingAsync(
+        Guid movieId,
+        bool isRetryAttempt = false,
+        CancellationToken cancellationToken = default)
+    {
+        var movieLock = MovieLocks.GetOrAdd(movieId, static _ => new SemaphoreSlim(1, 1));
+        await movieLock.WaitAsync(cancellationToken);
+
+        try
+        {
+            var movie = await LoadMovieAsync(movieId, cancellationToken);
+            if (movie is null || movie.Status == "Inactive")
+            {
+                await RemoveMovieEmbeddingCoreAsync(movieId, cancellationToken);
+                return new MovieEmbeddingSyncResult(MovieEmbeddingSyncStatuses.Ready);
+            }
+
+            var embeddedText = MovieEmbeddingContentBuilder.Build(movie);
+            var contentHash = MovieEmbeddingContentBuilder.ComputeHash(embeddedText);
+            var existing = await _db.MovieEmbeddings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.MovieId == movieId, cancellationToken);
+
+            if (existing is not null
+                && existing.Embedding.Length > 0
+                && existing.ContentHash == contentHash)
+            {
+                await RemoveSyncStateAsync(movieId, cancellationToken);
+                return new MovieEmbeddingSyncResult(MovieEmbeddingSyncStatuses.Ready, contentHash);
+            }
+
+            try
+            {
+                await MarkPendingAsync(movieId, contentHash, isRetryAttempt, cancellationToken);
+                var embedding = await _embeddingService.EmbedAsync(embeddedText, cancellationToken);
+                if (embedding.Length == 0)
+                {
+                    throw new InvalidOperationException("Embedding provider returned an empty vector.");
+                }
+
+                var currentMovie = await LoadMovieAsync(movieId, cancellationToken);
+                if (currentMovie is null || currentMovie.Status == "Inactive")
+                {
+                    await RemoveMovieEmbeddingCoreAsync(movieId, cancellationToken);
+                    return new MovieEmbeddingSyncResult(MovieEmbeddingSyncStatuses.Ready);
+                }
+
+                var currentText = MovieEmbeddingContentBuilder.Build(currentMovie);
+                var currentHash = MovieEmbeddingContentBuilder.ComputeHash(currentText);
+                if (currentHash != contentHash)
+                {
+                    const string staleMessage = "Movie content changed while its embedding was being generated.";
+                    await RecordFailureAsync(movieId, currentHash, staleMessage, false, cancellationToken);
+                    _logger.LogInformation(
+                        "Discarded stale embedding result for movie {MovieId}; current hash is {ContentHash}.",
+                        movieId,
+                        currentHash);
+                    return new MovieEmbeddingSyncResult(
+                        MovieEmbeddingSyncStatuses.Pending,
+                        currentHash,
+                        staleMessage);
+                }
+
+                var trackedEmbedding = await _db.MovieEmbeddings
+                    .FirstOrDefaultAsync(item => item.MovieId == movieId, cancellationToken);
+                if (trackedEmbedding is null)
+                {
+                    trackedEmbedding = new MovieEmbedding { MovieId = movieId };
+                    _db.MovieEmbeddings.Add(trackedEmbedding);
+                }
+
+                trackedEmbedding.EmbeddedText = currentText;
+                trackedEmbedding.ContentHash = currentHash;
+                trackedEmbedding.Embedding = embedding;
+                trackedEmbedding.LastUpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
+
+                var syncState = await _db.MovieEmbeddingSyncStates
+                    .FirstOrDefaultAsync(item => item.MovieId == movieId, cancellationToken);
+                if (syncState is not null)
+                {
+                    _db.MovieEmbeddingSyncStates.Remove(syncState);
+                }
+
+                await _db.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation(
+                    "Movie embedding sync succeeded for {MovieId} with {Dimensions} dimensions and hash {ContentHash}.",
+                    movieId,
+                    embedding.Length,
+                    currentHash);
+
+                return new MovieEmbeddingSyncResult(MovieEmbeddingSyncStatuses.Ready, currentHash);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                DetachFailedAddedEntities();
+                var currentMovie = await LoadMovieAsync(movieId, cancellationToken);
+                if (currentMovie is null || currentMovie.Status == "Inactive")
+                {
+                    await RemoveMovieEmbeddingCoreAsync(movieId, cancellationToken);
+                    return new MovieEmbeddingSyncResult(MovieEmbeddingSyncStatuses.Ready);
+                }
+
+                var currentHash = MovieEmbeddingContentBuilder.ComputeHash(
+                    MovieEmbeddingContentBuilder.Build(currentMovie));
+                var result = await RecordFailureAsync(
+                    movieId,
+                    currentHash,
+                    exception.Message,
+                    isRetryAttempt,
+                    cancellationToken);
+
+                _logger.LogWarning(
+                    exception,
+                    "Movie embedding sync {Status} for {MovieId} at retry attempt {AttemptCount}.",
+                    result.Status,
+                    movieId,
+                    result.AttemptCount);
+
+                return new MovieEmbeddingSyncResult(result.Status, currentHash, result.Error);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            DetachFailedAddedEntities();
+            _logger.LogError(
+                exception,
+                "Movie embedding sync could not persist retry state for {MovieId}; returning Pending.",
+                movieId);
+            return new MovieEmbeddingSyncResult(
+                MovieEmbeddingSyncStatuses.Pending,
+                Error: TruncateError(exception.Message));
+        }
+        finally
+        {
+            movieLock.Release();
+        }
+    }
+
+    public async Task RemoveMovieEmbeddingAsync(Guid movieId, CancellationToken cancellationToken = default)
+    {
+        var movieLock = MovieLocks.GetOrAdd(movieId, static _ => new SemaphoreSlim(1, 1));
+        await movieLock.WaitAsync(cancellationToken);
+        try
+        {
+            await RemoveMovieEmbeddingCoreAsync(movieId, cancellationToken);
+        }
+        finally
+        {
+            movieLock.Release();
         }
     }
 
@@ -112,30 +263,140 @@ public sealed class EmbeddingSyncService : IEmbeddingSyncService
         }
     }
 
-    private static string BuildMovieEmbeddedText(Movie movie)
+    private Task<Movie?> LoadMovieAsync(Guid movieId, CancellationToken cancellationToken)
     {
-        var sb = new StringBuilder();
-        sb.Append(movie.Title);
-        sb.Append(" - ");
-        sb.Append(movie.Description);
-        sb.Append(" - Duration: ").Append(movie.Duration).Append(" minutes");
-        sb.Append(" - Language: ").Append(movie.Language);
-        sb.Append(" - Rating: ").Append(movie.Rating);
+        return _db.Movies
+            .AsNoTracking()
+            .Include(movie => movie.MovieGenres)
+                .ThenInclude(item => item.Genre)
+            .FirstOrDefaultAsync(movie => movie.Id == movieId, cancellationToken);
+    }
 
-        if (movie.MovieGenres?.Count > 0)
+    private async Task RemoveMovieEmbeddingCoreAsync(Guid movieId, CancellationToken cancellationToken)
+    {
+        var embedding = await _db.MovieEmbeddings
+            .FirstOrDefaultAsync(item => item.MovieId == movieId, cancellationToken);
+        if (embedding is not null)
         {
-            sb.Append(" - Genres: ");
-            sb.Append(string.Join(", ", movie.MovieGenres.Select(g => g.Genre.Name)));
+            _db.MovieEmbeddings.Remove(embedding);
         }
 
-        return sb.ToString();
+        var syncState = await _db.MovieEmbeddingSyncStates
+            .FirstOrDefaultAsync(item => item.MovieId == movieId, cancellationToken);
+        if (syncState is not null)
+        {
+            _db.MovieEmbeddingSyncStates.Remove(syncState);
+        }
+
+        if (embedding is not null || syncState is not null)
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Removed embedding state for movie {MovieId}.", movieId);
+        }
     }
 
-    private static string ComputeHash(string text)
+    private async Task RemoveSyncStateAsync(Guid movieId, CancellationToken cancellationToken)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(text));
-        return Convert.ToHexString(bytes);
+        var syncState = await _db.MovieEmbeddingSyncStates
+            .FirstOrDefaultAsync(item => item.MovieId == movieId, cancellationToken);
+        if (syncState is null) return;
+
+        _db.MovieEmbeddingSyncStates.Remove(syncState);
+        await _db.SaveChangesAsync(cancellationToken);
     }
+
+    private async Task<FailureRecordResult> RecordFailureAsync(
+        Guid movieId,
+        string requestedContentHash,
+        string error,
+        bool isRetryAttempt,
+        CancellationToken cancellationToken)
+    {
+        var now = _timeProvider.GetUtcNow();
+        var syncState = await _db.MovieEmbeddingSyncStates
+            .FirstOrDefaultAsync(item => item.MovieId == movieId, cancellationToken);
+
+        if (syncState is null)
+        {
+            syncState = new MovieEmbeddingSyncState { MovieId = movieId };
+            _db.MovieEmbeddingSyncStates.Add(syncState);
+        }
+
+        syncState.AttemptCount = isRetryAttempt ? syncState.AttemptCount + 1 : 0;
+        syncState.LastAttemptAt = now;
+        syncState.RequestedContentHash = requestedContentHash;
+        syncState.LastError = TruncateError(error);
+
+        var maxAttempts = Math.Max(1, _retryOptions.MaxAttempts);
+        if (isRetryAttempt && syncState.AttemptCount >= maxAttempts)
+        {
+            syncState.Status = MovieEmbeddingSyncStatuses.Failed;
+            syncState.NextAttemptAt = null;
+        }
+        else
+        {
+            syncState.Status = MovieEmbeddingSyncStatuses.Pending;
+            syncState.NextAttemptAt = now.Add(CalculateRetryDelay(syncState.AttemptCount));
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return new FailureRecordResult(syncState.Status, syncState.AttemptCount, syncState.LastError);
+    }
+
+    private async Task MarkPendingAsync(
+        Guid movieId,
+        string requestedContentHash,
+        bool isRetryAttempt,
+        CancellationToken cancellationToken)
+    {
+        var syncState = await _db.MovieEmbeddingSyncStates
+            .FirstOrDefaultAsync(item => item.MovieId == movieId, cancellationToken);
+        if (syncState is null)
+        {
+            syncState = new MovieEmbeddingSyncState { MovieId = movieId };
+            _db.MovieEmbeddingSyncStates.Add(syncState);
+        }
+
+        if (!isRetryAttempt)
+        {
+            syncState.AttemptCount = 0;
+        }
+
+        syncState.Status = MovieEmbeddingSyncStatuses.Pending;
+        syncState.RequestedContentHash = requestedContentHash;
+        syncState.LastError = string.Empty;
+        syncState.NextAttemptAt = _timeProvider.GetUtcNow().Add(CalculateRetryDelay(syncState.AttemptCount));
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private TimeSpan CalculateRetryDelay(int attemptCount)
+    {
+        var baseDelaySeconds = Math.Max(1, _retryOptions.BaseDelaySeconds);
+        var maxDelaySeconds = Math.Max(baseDelaySeconds, _retryOptions.MaxDelaySeconds);
+        var exponent = Math.Clamp(attemptCount, 0, 20);
+        var delaySeconds = Math.Min(maxDelaySeconds, baseDelaySeconds * Math.Pow(2, exponent));
+        return TimeSpan.FromSeconds(delaySeconds);
+    }
+
+    private static string TruncateError(string error)
+    {
+        var normalized = string.IsNullOrWhiteSpace(error) ? "Embedding provider failed." : error.Trim();
+        return normalized.Length <= 512 ? normalized : normalized[..512];
+    }
+
+    private void DetachFailedAddedEntities()
+    {
+        var failedEntries = _db.ChangeTracker.Entries()
+            .Where(entry => entry.State == EntityState.Added
+                && (entry.Entity is MovieEmbedding || entry.Entity is MovieEmbeddingSyncState))
+            .ToList();
+        foreach (var entry in failedEntries)
+        {
+            entry.State = EntityState.Detached;
+        }
+    }
+
+    private sealed record FailureRecordResult(string Status, int AttemptCount, string Error);
 
     private static List<KnowledgeDocument> GetFaqDocuments()
     {

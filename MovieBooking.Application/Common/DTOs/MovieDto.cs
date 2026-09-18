@@ -13,4 +13,5 @@ public class MovieDto
     public string Status { get; set; } = string.Empty;
     public List<string> Genres { get; set; } = [];
     public List<Guid> GenreIds { get; set; } = [];
+    public string EmbeddingStatus { get; set; } = string.Empty;
 }

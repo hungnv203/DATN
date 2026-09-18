@@ -6,5 +6,5 @@ namespace MovieBooking.Application.Common.Interfaces;
 public interface IMovieService : ICrudService<Movie, MovieDto>
 {
     Task<IReadOnlyList<MovieDto>> GetAllAsync(Guid? genreId = null, CancellationToken cancellationToken = default);
+    Task<MovieDto?> UpdateWithEmbeddingAsync(Guid id, MovieDto dto, CancellationToken cancellationToken = default);
 }
-

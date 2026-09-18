@@ -9,12 +9,14 @@ namespace MovieBooking.Controllers;
 [Route("api/movies")]
 public class MoviesController : CrudController<Movie, MovieDto>
 {
+    private readonly IMovieService _movieService;
     private readonly IMovieDiscoveryService _movieDiscoveryService;
 
     public MoviesController(
         IMovieService crudService,
         IMovieDiscoveryService movieDiscoveryService) : base(crudService)
     {
+        _movieService = crudService;
         _movieDiscoveryService = movieDiscoveryService;
     }
 
@@ -31,7 +33,13 @@ public class MoviesController : CrudController<Movie, MovieDto>
     [HttpGet]
     public override async Task<ActionResult<IReadOnlyList<MovieDto>>> GetAll(CancellationToken cancellationToken)
     {
-        return await base.GetAll(cancellationToken);
+        Guid? genreId = null;
+        if (Request.Query.TryGetValue("genreId", out var genreStr) && Guid.TryParse(genreStr, out var parsedId))
+        {
+            genreId = parsedId;
+        }
+
+        return Ok(await _movieService.GetAllAsync(genreId, cancellationToken));
     }
 
     [AllowAnonymous]

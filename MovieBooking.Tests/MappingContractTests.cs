@@ -118,4 +118,29 @@ public sealed class MappingContractTests
         Assert.Equal("QR_AVATAR_H12", dto.QrCode);
         Assert.True(dto.CreatedAt > DateTime.MinValue);
     }
+
+    [Fact]
+    public void MovieToMovieDto_MapsGenresAndGenreIds_Correctly()
+    {
+        var actionGenre = new Genre { Name = "Action" };
+        var sciFiGenre = new Genre { Name = "Sci-Fi" };
+        var movie = new Movie
+        {
+            Title = "Inception",
+            MovieGenres = new List<MovieGenre>
+            {
+                new MovieGenre { Genre = actionGenre, GenreId = actionGenre.Id },
+                new MovieGenre { Genre = sciFiGenre, GenreId = sciFiGenre.Id }
+            }
+        };
+
+        var dto = _mapper.Map<MovieDto>(movie);
+
+        Assert.NotNull(dto);
+        Assert.Equal("Inception", dto.Title);
+        Assert.Equal(2, dto.Genres.Count);
+        Assert.Contains("Action", dto.Genres);
+        Assert.Contains("Sci-Fi", dto.Genres);
+        Assert.Equal(2, dto.GenreIds.Count);
+    }
 }

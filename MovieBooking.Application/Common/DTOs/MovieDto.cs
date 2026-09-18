@@ -11,4 +11,6 @@ public class MovieDto
     public string Rating { get; set; } = string.Empty;
     public string PosterUrl { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public List<string> Genres { get; set; } = [];
+    public List<Guid> GenreIds { get; set; } = [];
 }

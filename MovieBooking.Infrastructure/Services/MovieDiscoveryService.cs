@@ -124,6 +124,8 @@ public class MovieDiscoveryService : IMovieDiscoveryService
                 Rating = movie.Rating,
                 PosterUrl = movie.PosterUrl,
                 Status = movie.Status,
+                Genres = movie.MovieGenres.Select(mg => mg.Genre.Name).OrderBy(n => n).ToList(),
+                GenreIds = movie.MovieGenres.Select(mg => mg.GenreId).ToList()
             })
             .ToListAsync(cancellationToken);
         var moviesById = movies.ToDictionary(movie => movie.Id);

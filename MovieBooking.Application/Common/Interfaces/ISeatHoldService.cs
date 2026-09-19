@@ -19,7 +19,7 @@ public interface ISeatHoldService
         HoldSeatsRequestDto request,
         CancellationToken cancellationToken = default);
 
-    Task<SeatStateChangeBatchDto?> ReleaseAsync(
+    Task<SeatHoldResultDto> ReleaseAsync(
         Guid userId,
         Guid holdGroupId,
         CancellationToken cancellationToken = default);

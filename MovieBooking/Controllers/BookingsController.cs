@@ -4,9 +4,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Exceptions;
 using MovieBooking.Application.Common.Interfaces;
+using MovieBooking.Domain.Constants;
 using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Security;
 
@@ -165,37 +167,31 @@ public class BookingsController : CrudController<Booking, BookingDto>
 
     [HttpPost("hold-seats")]
     [Authorize]
+    [EnableRateLimiting("SeatHoldMutation")]
     public async Task<ActionResult<SeatHoldResultDto>> HoldSeats([FromBody] HoldSeatsRequestDto request, CancellationToken cancellationToken)
     {
-        try
+        var result = await _seatHoldService.CreateOrReplaceForShowtimeAsync(
+            GetCurrentUserId(),
+            request,
+            cancellationToken);
+        if (result.ChangeBatch != null)
         {
-            var result = await _seatHoldService.CreateOrReplaceForShowtimeAsync(
-                GetCurrentUserId(),
-                request,
-                cancellationToken);
-            if (result.ChangeBatch != null)
-            {
-                await _seatRealtimePublisher.PublishAsync(result.ChangeBatch, cancellationToken);
-            }
-            if (!result.Success)
-            {
-                return result.ErrorCode switch
-                {
-                    "SHOWTIME_NOT_FOUND" => NotFound(result),
-                    "SEAT_NOT_AVAILABLE" => Conflict(result),
-                    _ => BadRequest(result)
-                };
-            }
-            return Ok(result);
+            await _seatRealtimePublisher.PublishAsync(result.ChangeBatch, cancellationToken);
         }
-        catch (Exception)
+        if (!result.Success)
         {
-            return Conflict(new SeatHoldResultDto
+            return result.ErrorCode switch
             {
-                Success = false,
-                Message = "The selected seats are no longer available."
-            });
+                SeatHoldErrors.ShowtimeNotFound or SeatHoldErrors.HoldNotFound => NotFound(result),
+                SeatHoldErrors.SeatNotAvailable
+                    or SeatHoldErrors.HoldSeatLimitExceeded
+                    or SeatHoldErrors.ShowtimeNotBookable
+                    or SeatHoldErrors.HoldAlreadyBooked
+                    or SeatHoldErrors.BookingAlreadyPending => Conflict(result),
+                _ => BadRequest(result)
+            };
         }
+        return Ok(result);
     }
 
     [HttpPost("quote")]

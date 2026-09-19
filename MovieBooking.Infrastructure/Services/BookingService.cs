@@ -8,12 +8,14 @@ using System.Threading.Tasks;
 using AutoMapper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Exceptions;
 using MovieBooking.Application.Common.Interfaces;
 using MovieBooking.Domain.Constants;
 using MovieBooking.Domain.Entities;
 using MovieBooking.Infrastructure.Persistence;
+using Npgsql;
 
 namespace MovieBooking.Infrastructure.Services;
 
@@ -25,13 +27,15 @@ public class BookingService : IBookingService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IPricingService _pricingService;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<BookingService> _logger;
 
     public BookingService(
         AppDbContext db,
         IMapper mapper,
         IHttpContextAccessor httpContextAccessor,
         IPricingService pricingService,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ILogger<BookingService> logger)
     {
         _operations = new EntityCrudOperations<Booking, BookingDto>(db, mapper);
         _db = db;
@@ -39,6 +43,7 @@ public class BookingService : IBookingService
         _httpContextAccessor = httpContextAccessor;
         _pricingService = pricingService;
         _timeProvider = timeProvider;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<BookingDto>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -122,7 +127,7 @@ public class BookingService : IBookingService
 
     public Task<BookingDto> CreateAsync(BookingDto dto, CancellationToken cancellationToken = default)
     {
-        return CreateInternalAsync(dto, false, cancellationToken);
+        return ExecuteWithRetryAsync(() => CreateInternalAsync(dto, false, cancellationToken), cancellationToken);
     }
 
     public Task<bool> UpdateAsync(Guid id, BookingDto dto, CancellationToken cancellationToken = default) =>
@@ -133,7 +138,75 @@ public class BookingService : IBookingService
 
     public Task<BookingDto> CreatePointOfSaleAsync(BookingDto dto, CancellationToken cancellationToken = default)
     {
-        return CreateInternalAsync(dto, true, cancellationToken);
+        return ExecuteWithRetryAsync(() => CreateInternalAsync(dto, true, cancellationToken), cancellationToken);
+    }
+
+    private async Task<BookingDto> ExecuteWithRetryAsync(
+        Func<Task<BookingDto>> operation,
+        CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 3;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                return await operation();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (SeatHoldConflictException)
+            {
+                throw;
+            }
+            catch (Exception exception) when (IsRetryable(exception) && attempt < maxAttempts)
+            {
+                LogRetry(attempt, exception);
+                _db.ChangeTracker.Clear();
+                await Task.Delay(TimeSpan.FromMilliseconds(25 * attempt), cancellationToken);
+            }
+            catch (Exception exception) when (IsRetryable(exception))
+            {
+                LogRetry(attempt, exception);
+                _db.ChangeTracker.Clear();
+                throw new SeatHoldConflictException(
+                    "The booking could not be created because availability changed.");
+            }
+        }
+
+        throw new InvalidOperationException("Booking retry loop ended unexpectedly.");
+    }
+
+    private static bool IsRetryable(Exception exception)
+    {
+        var postgres = FindPostgresException(exception);
+        return postgres?.SqlState is PostgresErrorCodes.SerializationFailure
+            or PostgresErrorCodes.DeadlockDetected
+            or PostgresErrorCodes.UniqueViolation;
+    }
+
+    private static PostgresException? FindPostgresException(Exception exception)
+    {
+        for (Exception? current = exception; current != null; current = current.InnerException)
+        {
+            if (current is PostgresException postgresException)
+            {
+                return postgresException;
+            }
+        }
+
+        return null;
+    }
+
+    private void LogRetry(int attempt, Exception exception)
+    {
+        var postgres = FindPostgresException(exception);
+        _logger.LogWarning(
+            exception,
+            "Booking transaction retry. Attempt={Attempt}, SqlState={SqlState}",
+            attempt,
+            postgres?.SqlState);
     }
 
     private async Task<BookingDto> CreateInternalAsync(
@@ -204,26 +277,25 @@ public class BookingService : IBookingService
                 }
             }
 
-            var activeOwnedHolds = await _db.SeatHolds
+            var candidateGroupSeatIds = await _db.SeatHolds
+                .AsNoTracking()
                 .Where(hold => hold.ShowtimeId == dto.ShowtimeId
                                && hold.UserId == finalUserId
+                               && hold.HoldGroupId == dto.SeatHoldGroupId.Value
                                && hold.Status == SeatHoldStatuses.Active
                                && hold.ExpiredAt > now
                                && hold.BookingId == null)
                 .OrderBy(hold => hold.SeatId)
+                .Select(hold => hold.SeatId)
                 .ToListAsync(cancellationToken);
 
-            activeHoldRows = activeOwnedHolds
-                .Where(hold => hold.HoldGroupId == dto.SeatHoldGroupId.Value)
-                .ToList();
-
-            if (activeHoldRows.Count == 0)
+            if (candidateGroupSeatIds.Count == 0)
             {
                 throw new SeatHoldConflictException(
                     "An active seat hold owned by the current user is required.");
             }
 
-            var groupSeatIds = activeHoldRows.Select(hold => hold.SeatId).OrderBy(id => id).ToArray();
+            var groupSeatIds = candidateGroupSeatIds.OrderBy(id => id).ToArray();
             if (dto.SeatIds.Count > 0
                 && !dto.SeatIds.OrderBy(id => id).SequenceEqual(groupSeatIds))
             {
@@ -234,11 +306,32 @@ public class BookingService : IBookingService
             dto.SeatIds = groupSeatIds.ToList();
         }
 
-        // Fetch all seats
-        var seats = await _db.Seats.Where(s => dto.SeatIds.Contains(s.Id) && s.RoomId == showtime.RoomId).ToListAsync(cancellationToken);
+        // Lock the canonical group seats before re-reading mutable hold rows.
+        var seats = await _db.Seats
+            .FromSqlRaw(
+                "SELECT * FROM \"Seats\" WHERE \"Id\" = ANY({0}) AND \"RoomId\" = {1} ORDER BY \"Id\" FOR UPDATE",
+                dto.SeatIds.ToArray(),
+                showtime.RoomId)
+            .ToListAsync(cancellationToken);
         if (seats.Count != dto.SeatIds.Count)
         {
             throw new InvalidOperationException("Một hoặc nhiều ghế được chọn không hợp lệ hoặc không thuộc phòng chiếu này.");
+        }
+
+        activeHoldRows = await _db.SeatHolds
+            .Where(hold => hold.ShowtimeId == dto.ShowtimeId
+                           && hold.UserId == finalUserId
+                           && hold.HoldGroupId == dto.SeatHoldGroupId!.Value
+                           && hold.Status == SeatHoldStatuses.Active
+                           && hold.ExpiredAt > now
+                           && hold.BookingId == null)
+            .OrderBy(hold => hold.SeatId)
+            .ToListAsync(cancellationToken);
+        if (activeHoldRows.Count != dto.SeatIds.Count
+            || !activeHoldRows.Select(hold => hold.SeatId).SequenceEqual(dto.SeatIds.OrderBy(id => id)))
+        {
+            throw new SeatHoldConflictException(
+                "The active seat hold changed while the booking was being created.");
         }
 
         // Check availability

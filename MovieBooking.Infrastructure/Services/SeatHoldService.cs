@@ -14,7 +14,7 @@ namespace MovieBooking.Infrastructure.Services;
 internal sealed class SeatHoldService : ISeatHoldService
 {
     private const int MaxTransactionAttempts = 3;
-    private static readonly TimeSpan HoldDuration = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan HoldDuration = TimeSpan.FromMinutes(SeatHoldErrors.HoldTtlMinutes);
 
     private readonly AppDbContext _dbContext;
     private readonly ILogger<SeatHoldService> _logger;
@@ -92,25 +92,64 @@ internal sealed class SeatHoldService : ISeatHoldService
             cancellationToken);
     }
 
-    public async Task<SeatStateChangeBatchDto?> ReleaseAsync(
+    public Task<SeatHoldResultDto> ReleaseAsync(
         Guid userId,
         Guid holdGroupId,
         CancellationToken cancellationToken = default)
+    {
+        return ExecuteReleaseWithRetryAsync(
+            () => ReleaseCoreAsync(userId, holdGroupId, cancellationToken),
+            holdGroupId,
+            cancellationToken);
+    }
+
+    private async Task<SeatHoldResultDto> ReleaseCoreAsync(
+        Guid userId,
+        Guid holdGroupId,
+        CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var now = GetUtcNow();
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, cancellationToken);
+
+        var candidateSeatIds = await _dbContext.SeatHolds
+            .AsNoTracking()
+            .Where(hold => hold.HoldGroupId == holdGroupId
+                           && hold.UserId == userId
+                           && hold.Status == SeatHoldStatuses.Active
+                           && hold.ExpiredAt > now)
+            .Select(hold => hold.SeatId)
+            .Distinct()
+            .OrderBy(seatId => seatId)
+            .ToArrayAsync(cancellationToken);
+        if (candidateSeatIds.Length == 0)
+        {
+            return Failure(SeatHoldErrors.HoldNotFound, "Seat hold was not found.", now);
+        }
+
+        await _dbContext.Seats
+            .FromSqlRaw(
+                "SELECT * FROM \"Seats\" WHERE \"Id\" = ANY({0}) ORDER BY \"Id\" FOR UPDATE",
+                candidateSeatIds)
+            .ToListAsync(cancellationToken);
+
         var rows = await _dbContext.SeatHolds
             .Where(hold => hold.HoldGroupId == holdGroupId
                            && hold.UserId == userId
                            && hold.Status == SeatHoldStatuses.Active
                            && hold.ExpiredAt > now)
+            .OrderBy(hold => hold.SeatId)
             .ToListAsync(cancellationToken);
-
         if (rows.Count == 0)
         {
-            return null;
+            return Failure(SeatHoldErrors.HoldNotFound, "Seat hold was not found.", now);
+        }
+
+        if (rows.Any(hold => hold.BookingId != null))
+        {
+            return Failure(SeatHoldErrors.HoldAlreadyBooked,
+                "This seat hold is already linked to a booking.", now);
         }
 
         foreach (var row in rows)
@@ -124,12 +163,23 @@ internal sealed class SeatHoldService : ISeatHoldService
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         LogOperation("Release", holdGroupId, rows[0].ShowtimeId, rows.Count, "Released", stopwatch.Elapsed);
-        return CreateBatch(rows[0].ShowtimeId, version, now, rows.Select(row => new SeatStateChangeDto
+
+        var result = BuildResult(
+            true,
+            "Seat hold released successfully.",
+            holdGroupId,
+            rows[0].ShowtimeId,
+            rows.Select(row => row.SeatId).ToArray(),
+            SeatHoldStatuses.Released,
+            rows.Min(row => row.ExpiredAt),
+            now);
+        result.ChangeBatch = CreateBatch(rows[0].ShowtimeId, version, now, rows.Select(row => new SeatStateChangeDto
         {
             SeatId = row.SeatId,
             Status = "Available",
             HoldGroupId = row.HoldGroupId
         }).ToArray());
+        return result;
     }
 
     public async Task<IReadOnlyList<SeatStateChangeBatchDto>> ExpireElapsedAsync(CancellationToken cancellationToken = default)
@@ -190,11 +240,21 @@ internal sealed class SeatHoldService : ISeatHoldService
         var showtime = await _dbContext.Showtimes
             .AsNoTracking()
             .Where(item => item.Id == request.ShowtimeId)
-            .Select(item => new { item.Id, item.RoomId })
+            .Select(item => new { item.Id, item.RoomId, item.StartTime, item.Status })
             .SingleOrDefaultAsync(cancellationToken);
         if (showtime == null)
         {
-            return Failure("SHOWTIME_NOT_FOUND", "Showtime was not found.", now);
+            return Failure(SeatHoldErrors.ShowtimeNotFound, "Showtime was not found.", now);
+        }
+
+        if (showtime.StartTime <= now)
+        {
+            return Failure(SeatHoldErrors.ShowtimeNotBookable, "Showtime has already started.", now);
+        }
+
+        if (IsTerminalShowtimeStatus(showtime.Status))
+        {
+            return Failure(SeatHoldErrors.ShowtimeNotBookable, "Showtime is no longer available.", now);
         }
 
         var lockedSeats = await _dbContext.Seats
@@ -205,7 +265,7 @@ internal sealed class SeatHoldService : ISeatHoldService
             .ToListAsync(cancellationToken);
         if (lockedSeats.Count != requestedSeatIds.Length)
         {
-            return Failure("INVALID_SEAT_SELECTION", "One or more seats do not belong to the showtime room.", now);
+            return Failure(SeatHoldErrors.InvalidSeatSelection, "One or more seats do not belong to the showtime room.", now);
         }
 
         var elapsedRows = await _dbContext.SeatHolds
@@ -222,6 +282,7 @@ internal sealed class SeatHoldService : ISeatHoldService
 
         List<SeatHold> ownedRows;
         Guid holdGroupId;
+        DateTime expiry;
         if (requestedGroupId.HasValue)
         {
             ownedRows = await _dbContext.SeatHolds
@@ -232,13 +293,30 @@ internal sealed class SeatHoldService : ISeatHoldService
                 .ToListAsync(cancellationToken);
             if (ownedRows.Count == 0 || ownedRows.Any(hold => hold.ShowtimeId != request.ShowtimeId))
             {
-                return Failure("HOLD_NOT_FOUND", "Seat hold was not found.", now);
+                return Failure(SeatHoldErrors.HoldNotFound, "Seat hold was not found.", now);
+            }
+
+            if (ownedRows.Any(hold => hold.BookingId != null))
+            {
+                return Failure(SeatHoldErrors.HoldAlreadyBooked, "This seat hold is already linked to a booking.", now);
             }
 
             holdGroupId = requestedGroupId.Value;
+            expiry = ownedRows.Min(hold => hold.ExpiredAt);
         }
         else
         {
+            var hasPendingBooking = await _dbContext.Bookings
+                .AnyAsync(b => b.ShowtimeId == request.ShowtimeId
+                               && b.UserId == userId
+                               && b.Status == BookingStatuses.Pending
+                               && b.ExpiredAt > now, cancellationToken);
+            if (hasPendingBooking)
+            {
+                return Failure(SeatHoldErrors.BookingAlreadyPending,
+                    "You already have a pending booking for this showtime.", now);
+            }
+
             ownedRows = await _dbContext.SeatHolds
                 .Where(hold => hold.ShowtimeId == request.ShowtimeId
                                && hold.UserId == userId
@@ -246,9 +324,18 @@ internal sealed class SeatHoldService : ISeatHoldService
                                && hold.ExpiredAt > now
                                && hold.BookingId == null)
                 .ToListAsync(cancellationToken);
-            holdGroupId = ownedRows.Select(hold => hold.HoldGroupId).Distinct().Count() == 1
-                ? ownedRows[0].HoldGroupId
-                : Guid.NewGuid();
+            if (ownedRows.Count > 0)
+            {
+                holdGroupId = ownedRows.Select(hold => hold.HoldGroupId).Distinct().Count() == 1
+                    ? ownedRows[0].HoldGroupId
+                    : Guid.NewGuid();
+                expiry = ownedRows.Min(hold => hold.ExpiredAt);
+            }
+            else
+            {
+                holdGroupId = Guid.NewGuid();
+                expiry = now.Add(HoldDuration);
+            }
         }
 
         var paidConflict = await _dbContext.Tickets
@@ -273,10 +360,26 @@ internal sealed class SeatHoldService : ISeatHoldService
 
         if (paidConflict || pendingConflict || heldConflict)
         {
-            return Failure("SEAT_NOT_AVAILABLE", "One or more selected seats are no longer available.", now);
+            return Failure(SeatHoldErrors.SeatNotAvailable, "One or more selected seats are no longer available.", now);
         }
 
-        var expiry = now.Add(HoldDuration);
+        var ownedSeatIds = ownedRows.Select(row => row.SeatId).ToHashSet();
+        var isNoOp = ownedRows.Count > 0
+            && ownedRows.All(row => row.HoldGroupId == holdGroupId && row.ExpiredAt == expiry)
+            && ownedSeatIds.SetEquals(requestedSeatIds);
+        if (isNoOp)
+        {
+            return BuildResult(
+                true,
+                "Seats are already held.",
+                holdGroupId,
+                request.ShowtimeId,
+                requestedSeatIds,
+                SeatHoldStatuses.Active,
+                expiry,
+                now);
+        }
+
         foreach (var row in ownedRows)
         {
             if (requestedSeatIds.Contains(row.SeatId))
@@ -376,17 +479,23 @@ internal sealed class SeatHoldService : ISeatHoldService
                     result.Success ? "Success" : result.ErrorCode ?? "Failed", stopwatch.Elapsed);
                 return result;
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception exception) when (IsRetryable(exception) && attempt < MaxTransactionAttempts)
             {
+                LogRetry("CreateOrReplace", null, showtimeId, attempt, exception);
                 _dbContext.ChangeTracker.Clear();
                 await Task.Delay(TimeSpan.FromMilliseconds(25 * attempt), cancellationToken);
             }
             catch (Exception exception) when (IsRetryable(exception))
             {
+                LogRetry("CreateOrReplace", null, showtimeId, attempt, exception);
                 _dbContext.ChangeTracker.Clear();
                 LogOperation("CreateOrReplace", null, showtimeId, seatCount, "ConcurrencyConflict", stopwatch.Elapsed);
                 return Failure(
-                    "SEAT_NOT_AVAILABLE",
+                    SeatHoldErrors.SeatNotAvailable,
                     "One or more selected seats are no longer available.",
                     GetUtcNow());
             }
@@ -395,17 +504,58 @@ internal sealed class SeatHoldService : ISeatHoldService
         throw new InvalidOperationException("Seat-hold retry loop ended unexpectedly.");
     }
 
+    private async Task<SeatHoldResultDto> ExecuteReleaseWithRetryAsync(
+        Func<Task<SeatHoldResultDto>> operation,
+        Guid holdGroupId,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; attempt <= MaxTransactionAttempts; attempt++)
+        {
+            try
+            {
+                return await operation();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception) when (IsRetryable(exception) && attempt < MaxTransactionAttempts)
+            {
+                LogRetry("Release", holdGroupId, null, attempt, exception);
+                _dbContext.ChangeTracker.Clear();
+                await Task.Delay(TimeSpan.FromMilliseconds(25 * attempt), cancellationToken);
+            }
+            catch (Exception exception) when (IsRetryable(exception))
+            {
+                LogRetry("Release", holdGroupId, null, attempt, exception);
+                _dbContext.ChangeTracker.Clear();
+                return Failure(
+                    SeatHoldErrors.SeatNotAvailable,
+                    "The seat hold changed concurrently. Please refresh and try again.",
+                    GetUtcNow());
+            }
+        }
+
+        throw new InvalidOperationException("Seat-hold release retry loop ended unexpectedly.");
+    }
+
     private SeatHoldResultDto? ValidateRequest(HoldSeatsRequestDto request)
     {
         var now = GetUtcNow();
         if (request.ShowtimeId == Guid.Empty || request.SeatIds == null || request.SeatIds.Count == 0)
         {
-            return Failure("INVALID_REQUEST", "Showtime and at least one seat are required.", now);
+            return Failure(SeatHoldErrors.InvalidRequest, "Showtime and at least one seat are required.", now);
+        }
+
+        if (request.SeatIds.Count > SeatHoldErrors.MaxSeatsPerHold)
+        {
+            return Failure(SeatHoldErrors.HoldSeatLimitExceeded,
+                $"A seat hold cannot exceed {SeatHoldErrors.MaxSeatsPerHold} seats.", now);
         }
 
         if (request.SeatIds.Any(id => id == Guid.Empty) || request.SeatIds.Distinct().Count() != request.SeatIds.Count)
         {
-            return Failure("INVALID_REQUEST", "Seat identifiers must be non-empty and unique.", now);
+            return Failure(SeatHoldErrors.InvalidRequest, "Seat identifiers must be non-empty and unique.", now);
         }
 
         return null;
@@ -413,11 +563,53 @@ internal sealed class SeatHoldService : ISeatHoldService
 
     private static bool IsRetryable(Exception exception)
     {
-        var postgresException = exception as PostgresException
-            ?? exception.InnerException as PostgresException;
+        var postgresException = FindPostgresException(exception);
         return postgresException?.SqlState is PostgresErrorCodes.SerializationFailure
             or PostgresErrorCodes.DeadlockDetected
             or PostgresErrorCodes.UniqueViolation;
+    }
+
+    private static PostgresException? FindPostgresException(Exception exception)
+    {
+        for (Exception? current = exception; current != null; current = current.InnerException)
+        {
+            if (current is PostgresException postgresException)
+            {
+                return postgresException;
+            }
+        }
+
+        return null;
+    }
+
+    private void LogRetry(
+        string operation,
+        Guid? holdGroupId,
+        Guid? showtimeId,
+        int attempt,
+        Exception exception)
+    {
+        var postgresException = FindPostgresException(exception);
+        _logger.LogWarning(
+            exception,
+            "Seat hold transaction retry. Operation={Operation}, HoldGroupId={HoldGroupId}, ShowtimeId={ShowtimeId}, Attempt={Attempt}, SqlState={SqlState}",
+            operation,
+            holdGroupId,
+            showtimeId,
+            attempt,
+            postgresException?.SqlState);
+    }
+
+    private static bool IsTerminalShowtimeStatus(string status)
+    {
+        if (string.IsNullOrEmpty(status))
+        {
+            return false;
+        }
+
+        return status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("Ended", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("Inactive", StringComparison.OrdinalIgnoreCase);
     }
 
     private DateTime GetUtcNow() => _timeProvider.GetUtcNow().UtcDateTime;

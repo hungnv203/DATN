@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using MovieBooking.Application.Common.DTOs;
 using MovieBooking.Application.Common.Interfaces;
+using MovieBooking.Domain.Constants;
 
 namespace MovieBooking.Controllers;
 
@@ -21,6 +23,7 @@ public sealed class SeatHoldsController : ControllerBase
     }
 
     [HttpPost]
+    [EnableRateLimiting("SeatHoldMutation")]
     public async Task<ActionResult<SeatHoldResultDto>> Create(
         [FromBody] HoldSeatsRequestDto request,
         CancellationToken cancellationToken)
@@ -46,6 +49,7 @@ public sealed class SeatHoldsController : ControllerBase
     }
 
     [HttpPut("{holdGroupId:guid}")]
+    [EnableRateLimiting("SeatHoldMutation")]
     public async Task<ActionResult<SeatHoldResultDto>> Replace(
         Guid holdGroupId,
         [FromBody] HoldSeatsRequestDto request,
@@ -65,16 +69,17 @@ public sealed class SeatHoldsController : ControllerBase
         Guid holdGroupId,
         CancellationToken cancellationToken)
     {
-        var released = await _seatHoldService.ReleaseAsync(
+        var result = await _seatHoldService.ReleaseAsync(
             GetCurrentUserId(),
             holdGroupId,
             cancellationToken);
-        if (released == null)
+        if (!result.Success)
         {
-            return NotFound();
+            var failure = ToActionResult(result, StatusCodes.Status204NoContent);
+            return failure.Result!;
         }
 
-        await _publisher.PublishAsync(released, cancellationToken);
+        await PublishAsync(result.ChangeBatch, cancellationToken);
         return NoContent();
     }
 
@@ -90,8 +95,12 @@ public sealed class SeatHoldsController : ControllerBase
 
         return result.ErrorCode switch
         {
-            "SHOWTIME_NOT_FOUND" or "HOLD_NOT_FOUND" => NotFound(result),
-            "SEAT_NOT_AVAILABLE" => Conflict(result),
+            SeatHoldErrors.ShowtimeNotFound or SeatHoldErrors.HoldNotFound => NotFound(result),
+            SeatHoldErrors.SeatNotAvailable
+                or SeatHoldErrors.HoldSeatLimitExceeded
+                or SeatHoldErrors.ShowtimeNotBookable
+                or SeatHoldErrors.HoldAlreadyBooked
+                or SeatHoldErrors.BookingAlreadyPending => Conflict(result),
             _ => BadRequest(result)
         };
     }

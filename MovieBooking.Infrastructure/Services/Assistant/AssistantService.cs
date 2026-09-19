@@ -99,7 +99,7 @@ public sealed class AssistantService : IAssistantService
             }, cancellationToken);
 
             var byId = candidateList.ToDictionary(movie => movie.Id);
-            var showtimesByMovieId = showtimes.GroupBy(s => s.MovieId)
+            var showtimesByMovieId = showtimes.Where(s => s.StartTime > DateTime.Now).GroupBy(s => s.MovieId)
                 .ToDictionary(g => g.Key, g => (IReadOnlyList<AssistantShowtimeDto>)g.Take(5).ToList());
             var cards = aiResult.MovieIds.Distinct().Where(byId.ContainsKey)
                 .Take(Math.Clamp(_options.MaxMovieCards, 1, 5))
